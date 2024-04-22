@@ -1,0 +1,23 @@
+# for VGP:
+inducing_points_size: 32
+
+learning_rate: 0.01
+num_epochs: 100
+device: cpu
+dtype: constants.DTYPE
+train_val_ratio: .1
+evaluation_interval: 1
+epoch_blocks: 1
+
+intrinsic_kernel_params: 
+    normed: false
+    kernel_type: laplacian
+    heat_temp: .01
+    noise_factor: .0
+    amplitude: .5
+    n_neighbor: 10
+    lengthscale: .3
+    neighbor_mode: distance
+    power_factor: 1
+    invert_M_first: false 
+    normalize: false

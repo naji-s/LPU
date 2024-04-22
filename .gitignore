@@ -10,6 +10,8 @@
 models/**/*.pth
 scripts/**/*.pdf
 scripts/**/*.pth
+scripts/**/*.pth.tar
+
 
 # Optionally, ignore specific directories where checkpoints might be stored
 checkpoints/

@@ -1,0 +1,14 @@
+batchsize: 64
+device: cpu
+preset: figure1
+dataset: mnist
+labeled: 0
+unlabeled: 0
+numpy_dtype: float32
+epoch: 500
+beta: 0.0
+gamma: 1.0
+learning_rate: 0.001
+loss: sigmoid
+model: mlp
+out: /Users/naji/phd_codebase/lpu/scripts/nnPU/checkpoints

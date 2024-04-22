@@ -1,0 +1,10 @@
+learning_rate: .0001
+num_epochs: 100
+device: cpu
+dtype: constants.DTYPE
+train_val_ratio: .1
+evaluation_interval: 1
+epoch_blocks: 1
+kde_mode: logit
+loss_type: null
+nrep: 10
