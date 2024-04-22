@@ -1,0 +1,24 @@
+# .gitignore content for PyTorch and pickle files
+
+# Ignore all pickle files
+*.pkl
+
+# Ignore PyTorch checkpoints and model files
+*.pt
+*.pth
+# Ignore all .pth files in the models directory and subdirectories
+models/**/*.pth
+scripts/**/*.pdf
+scripts/**/*.pth
+
+# Optionally, ignore specific directories where checkpoints might be stored
+checkpoints/
+external_libs/
+
+# General Python ignores
+*.py[cod]
+__pycache__/
+
+checkpoints/*
+external_libs/*
+__pycache__/*
