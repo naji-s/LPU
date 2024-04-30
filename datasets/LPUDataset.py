@@ -5,14 +5,25 @@ import torch.utils.data
 
 import lpu.constants
 import lpu.datasets.animal_no_animal.animal_no_animal_utils
-import lpu.datasets.dataset_utils
+
+def normalize_features(X):
+    """
+    Normalizes the dataset.
+    """
+    if not isinstance(X, torch.Tensor):
+        X = torch.tensor(X, dtype=lpu.constants.DTYPE)
+    X_mean = X.mean(dim=0, keepdim=True)
+    X_std = X.std(dim=0, keepdim=True)
+    X_std[X_std == 0] = 1  # Prevent division by zero
+    X = (X - X_mean) / X_std
+    return X
 
 class LPUDataset(torch.utils.data.Dataset):
     """
     A dataset class for loading, preprocessing, and partitioning data 
     for learning purposes. This class is designed to be used with PyTorch
     """
-    def __init__(self, X=None, l=None, y=None, device=None, dataset_name=None, transform=lpu.datasets.dataset_utils.normalize_features, target_transform=None, load_all_data=True, invert_l=False):   
+    def __init__(self, data_dict=None, device=None, dataset_name=None,  transform=normalize_features, target_transform=None, load_all_data=True, invert_l=False):   
         """
         Initializes the dataset with data or loads from a specified dataset name. 
 
@@ -23,31 +34,50 @@ class LPUDataset(torch.utils.data.Dataset):
             dataset_name: Name of the dataset to load if X, l, and y are not provided.
         """        
         super().__init__()
+        if data_dict is None:
+            data_dict = {}
+            index = None
+        else:
+            X, l, y, index = data_dict.get('X', None), data_dict.get('l', None), data_dict.get('y', None), data_dict.get('index', np.arange(len(data_dict['X'])))
+
 
         self.transform = transform
         self.target_transform = target_transform
+        self.data_dict = data_dict
+        self.device = device
         if not load_all_data:
             raise NotImplementedError("load_all_data=False is not supported yet. ")
+
 
         if dataset_name:
             X, y, l = self._read_data(dataset_name)
         if invert_l:
             l = 1 - l
 
+        if index is not None:
+            self._index = index            
+        else:
+            self._index = np.arange(len(X))
+
+        X, l, y = X[self._index], l[self._index], y[self._index]
+
         X, l, y = self._check_input(X, l, y)
-        X, l, y = map(
-            lambda arr: torch.tensor(arr, dtype=lpu.constants.DTYPE).to(device), [X, l, y])
-        
+        if type(X) == np.ndarray:
+            X, l, y = map(
+                lambda arr: torch.tensor(arr, dtype=lpu.constants.DTYPE), [X, l, y])
+        else:
+            X, l, y = map(
+                lambda arr: arr.to(lpu.constants.DTYPE), [X, l, y])
         # Normalize the input features
         if transform:
             X = self.transform(X)     
 
         if target_transform:
             y = self.target_transform(y)
+            l = self.target_transform(l)
 
         self.X, self.l, self.y = X, l, y
-        self._index = np.arange(len(self.X))
-    
+
     @property
     def set_index(self, index):
         """
@@ -72,7 +102,7 @@ class LPUDataset(torch.utils.data.Dataset):
         """
         Fetches and returns the data (X, l, y) for a given index after applying any necessary transformations.
         """
-        return self.X[idx], self.l[idx], self.y[idx]
+        return self.X[idx], self.l[idx], self.y[idx], self._index[idx]
 
     def __len__(self):
         """

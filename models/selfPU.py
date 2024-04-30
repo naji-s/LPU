@@ -165,10 +165,10 @@ class selfPU(lpu.models.lpu_model_base.LPUModelBase):
         self.model.eval()
         return torch.sigmoid(self.model(torch.as_tensor(X, dtype=lpu.constants.DTYPE))).detach().numpy().flatten()
 
-    def predict_prob_y_given_x(self, X):
+    def predict_prob_y_given_X(self, X):
         return self.predict_proba(X) / self.C
     
-    def predict_prob_l_given_y_x(self, X):
+    def predict_prob_l_given_y_X(self, X):
         return self.C 
 
     def loss_fn(self, X_batch, l_batch):

@@ -44,10 +44,10 @@ class ElkanGGPC(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
             l_prob = torch.sigmoid(self.gp_model(X).rsample(sample_shape=torch.Size([1000]))).mean(dim=0)
         return l_prob 
 
-    def predict_prob_y_given_x(self, X):
+    def predict_prob_y_given_X(self, X):
         return self.predict_proba(X) / self.C
     
-    def predict_prob_l_given_y_x(self, X):
+    def predict_prob_l_given_y_X(self, X):
         return self.C 
 
     def set_C(self, holdout_dataloader):

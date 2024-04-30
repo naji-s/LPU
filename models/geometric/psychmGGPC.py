@@ -287,7 +287,7 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
     #     else:
     #         return mean.cpu().numpy()
 
-    def predict_prob_l_given_y_x(self, X):
+    def predict_prob_l_given_y_X(self, X):
         self.gp_model.eval()
         self.likelihood.eval()
         self.gp_model.update_input_data(X)
@@ -301,7 +301,7 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
         return output
         # return self.likelihood.probs.mean(axis=0).cpu().detach().numpy()
 
-    def predict_prob_y_given_x(self, X):
+    def predict_prob_y_given_X(self, X):
         self.gp_model.eval()
         self.likelihood.eval()
         self.gp_model.update_input_data(X)

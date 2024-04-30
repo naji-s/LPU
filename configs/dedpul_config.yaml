@@ -1,5 +1,5 @@
-learning_rate: .0001
-num_epochs: 100
+learning_rate: .01
+num_epochs: 1000
 device: cpu
 dtype: constants.DTYPE
 train_val_ratio: .1
@@ -8,3 +8,23 @@ epoch_blocks: 1
 kde_mode: logit
 loss_type: null
 nrep: 10
+dedpul_type: dedpul
+dataset_kind: LPU
+batch_size: 
+  train: 64
+  test: null
+  val: null
+  holdout: null
+ratios: 
+  # *** NOTE ***
+  # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+  # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+  test: 0.35 
+  val: 0.1 
+  holdout: .05 
+  train: .5 
+train_nn_options:  
+  loss_function: log
+  batch_size: 64
+  n_early_stop: 20
+  disp: false

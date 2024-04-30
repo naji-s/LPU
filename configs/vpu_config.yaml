@@ -1,0 +1,28 @@
+device: cpu
+dataset: 'fashionMNIST'
+gpu: 9
+val_iterations: 30
+num_labeled: 3000
+learning_rate: 0.0003
+epochs: 50
+mix_alpha: 0.3
+lam: 0.3
+positive_label_list: [1, 4, 7]
+random_seed: 0
+ratios: 
+  # *** NOTE ***
+  # TRAIN_RATIO : :  1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+  # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio : :  1
+  test: 0.05
+  val: 0.4
+  holdout: 0.05
+  train: .5
+dataset_kind: null
+batch_size: 
+  train: 64
+  test: 64
+  val: 64
+  holdout: 64
+
+
+ 

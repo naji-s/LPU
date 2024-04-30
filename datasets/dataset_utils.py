@@ -5,7 +5,9 @@ import torch
 import torch.utils.data 
 
 import lpu.constants
-
+import lpu.datasets
+import lpu.datasets.LPUDataset
+import lpu.external_libs.distPU.dataTools.factory
 # Assuming LPUDataset is defined as per previous corrections
 
 def get_mnist():
@@ -28,7 +30,8 @@ def get_mnist():
     y_te = np.asarray(y[60000:], dtype=np.int32)
     return (x_tr, y_tr), (x_te, y_te)
 
-def create_stratified_splits(dataset, train_val_ratio=0., batch_size=None, hold_out_size=0, train_test_ratio=.1, return_indices=False):
+
+def index_group_split(index_arr=None, ratios_dict=None, random_state=None, strat_arr=None):
     """
     Create stratified train and validation splits for a given dataset.
 
@@ -37,66 +40,48 @@ def create_stratified_splits(dataset, train_val_ratio=0., batch_size=None, hold_
         train_val_ratio (float): The ratio of training data to validation data.
         batch_size (int): The batch size for the data loaders.
         hold_out_size (float): The ratio of hold-out data to training data. Defaults to 0.
+        train_test_ratio (float): The ratio of testing data to training data. Defaults to 0.1.
+        random_state (int): The random seed for reproducibility. Defaults to None.
 
     Returns:
         tuple: A tuple containing the training, validation, and hold-out data loaders.
             The training data loader is used for training the model.
             The validation data loader is used for evaluating the model during training.
             The hold-out data loader is used for estimating a constant value (c) for Elkan & Noto (2008) algorithm.
+            The testing data loader is used for evaluating the model after training.
     """
-    train_dataloader = None
-    val_dataloader = None
-    hold_out_dataloader = None
-    test_dataloader = None
-    
     # Combine 'l' and 'y' for stratification
-    l_y_cat_transformed = dataset.l.cpu().numpy() * 2 + dataset.y.cpu().numpy()
 
-    if train_test_ratio:
-        train_indices, test_indices = sklearn.model_selection.train_test_split(
-            np.arange(len(dataset)),
-            test_size=train_test_ratio,
-            shuffle=True
-        )
-        test_sampler = torch.utils.data.SubsetRandomSampler(test_indices)
-        test_dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=test_sampler)
+    indices_dict = {}
+    past_ratio = 1.
+    new_ratio = None
+    for key, ratio in sorted(ratios_dict.items(), key=lambda x: -x[1]):
+        new_ratio = ratio / past_ratio
+            
+        if strat_arr is None:
+            strat_arr_split = None
+        else:
+            strat_arr_split = strat_arr[index_arr]
 
-    # Calculate indices for train and validation splits
-    if hold_out_size:
-        train_indices, hold_out_indices = sklearn.model_selection.train_test_split(
-            train_indices,
-            test_size=hold_out_size,
-            shuffle=True
-        )
+        if not np.allclose(new_ratio, 1.):
+            indices_dict[key], index_arr = sklearn.model_selection.train_test_split(
+                index_arr,
+                train_size=new_ratio,
+                shuffle=True, 
+                random_state=random_state,
+                stratify=strat_arr_split
+            )    
+        else:
+            indices_dict[key] = index_arr
+        past_ratio = past_ratio - ratio        
+    return indices_dict
 
-    train_indices, val_indices = sklearn.model_selection.train_test_split(
-        np.arange(len(dataset)),
-        stratify=l_y_cat_transformed,
-        test_size=train_val_ratio,
-        shuffle=True
-    )
-    if hold_out_size:
-        train_indices, hold_out_indices = sklearn.model_selection.train_test_split(
-            train_indices,
-            test_size=hold_out_size,
-            shuffle=True
-        )
+def make_data_loader(dataset, batch_size, sampler=None):
+    if batch_size is None:
+        batch_size = len(dataset)
+    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size)
+    return sampler, dataloader
 
-    train_sampler = torch.utils.data.SubsetRandomSampler(train_indices)
-    val_sampler = torch.utils.data.SubsetRandomSampler(val_indices)
-
-    if hold_out_size:
-        hold_out_sampler = torch.utils.data.SubsetRandomSampler(hold_out_indices)
-        hold_out_dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=hold_out_sampler)
-
-    if train_val_ratio:
-        val_dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,  sampler=val_sampler)
-
-    train_dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
-    if return_indices:
-        return train_dataloader, val_dataloader, hold_out_dataloader, test_dataloader, train_indices, val_indices, hold_out_indices, test_indices
-    else:
-        return train_dataloader, test_dataloader, val_dataloader, hold_out_dataloader
 
 def initialize_inducing_points(dataloader, inducing_points_size):
     # Assuming INDUCING_POINTS_SIZE is defined as an attribute or constant
@@ -109,15 +94,6 @@ def initialize_inducing_points(dataloader, inducing_points_size):
     inducing_points = torch.cat(inducing_points, dim=0)
     inducing_points = inducing_points[:inducing_points_size]
     return inducing_points
-
-# Usage
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# dataset_name = "animal_no_animal"  # Example dataset name
-# dataset = LPUDataset(dataset_name=dataset_name, device=device)
-
-# train_loader, val_loader = create_stratified_splits(dataset, train_val_ratio=0.2, batch_size=BATCH_SIZE, device=device)
-
-# Now you can use train_loader and val_loader in your training and validation loops.
 
 class StratifiedSampler(torch.utils.data.Sampler):
     """Stratified Sampling without replacement."""
@@ -152,16 +128,68 @@ class StratifiedSampler(torch.utils.data.Sampler):
     def __len__(self):
         return self.num_samples
 
-def normalize_features(X):
-    """
-    Normalizes the dataset.
-    """
-    if not isinstance(X, torch.Tensor):
-        X = torch.tensor(X, dtype=lpu.constants.DTYPE)
-    X_mean = X.mean(dim=0, keepdim=True)
-    X_std = X.std(dim=0, keepdim=True)
-    X_std[X_std == 0] = 1  # Prevent division by zero
-    X = (X - X_mean) / X_std
-    return X
+
 
             
+def LPUD_to_MPED(lpu_dataset, indices, double_unlabeled=False):
+    import lpu.external_libs.PU_learning.helper
+    if double_unlabeled:
+        # use all unlabeled data, which means we are using labeled data by removing the labels, to 
+        # make the case-control assumption hold
+        unlabeled_indices = indices
+    else:
+        # use only data where l=0, which under selection bias assumption is the same as l=0
+        unlabeled_indices = indices[lpu_dataset.l[indices]==0]
+        
+
+    p_indices = indices[lpu_dataset.l[indices]==1]
+
+
+    PDataset = lpu.external_libs.PU_learning.helper.PosData(
+        transform=lpu_dataset.transform, target_transform=None, data=lpu_dataset.X[p_indices], index=np.arange(len(p_indices)))
+    UDataset = lpu.external_libs.PU_learning.helper.UnlabelData(
+        transform=lpu_dataset.transform, target_transform=None, 
+        pos_data=lpu_dataset.X[unlabeled_indices][lpu_dataset.y[unlabeled_indices]==1], 
+        neg_data=lpu_dataset.X[unlabeled_indices][lpu_dataset.y[unlabeled_indices]==0],
+        index=np.arange(len(unlabeled_indices)))
+    
+    dataset_dict = {
+        'PDataset': PDataset,
+        'UDataset': UDataset,
+    }
+    indices_dict = {
+        'indices': indices,
+        'p_indices': p_indices,
+        'u_indices': unlabeled_indices,
+    }
+    return dataset_dict, indices_dict
+
+def create_dataloaders_dict(config, target_transform=None, transform=None):
+    dataloders_dict = {}
+    samplers_dict = {}
+    dataset_dict = {}
+    dataloaders_dict = {}
+    indices_dict = {}
+    ratios_dict = config['ratios']
+    if config['dataset_kind'] == 'LPU':
+        lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal', transform=transform, target_transform=target_transform)    
+    if config['dataset_kind'] == 'distPU':
+        dataset_train, dataset_test = lpu.external_libs.distPU.dataTools.factory.create_dataset(config['dataset'], config['datapath'])
+        X = np.concatenate([dataset_train.X, dataset_test.X], axis=0)
+        Y = np.concatenate([dataset_train.Y, dataset_test.Y], axis=0)
+        dataset = lpu.external_libs.distPU.dataTools.factory.BCDataset(X=X, Y=Y)
+        pu_dataset = lpu.external_libs.distPU.dataTools.factory.create_pu_dataset(dataset, config['num_labeled'])
+        l = pu_dataset.Y_PU
+        X = pu_dataset.X_train
+        Y = np.concatenate([pu_dataset.Y_train, np.ones(len(pu_dataset.Y_PU) - len(pu_dataset.Y_train))])
+        lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict={'X': X, 'l': l, 'y': Y}, transform=transform, target_transform=target_transform)
+
+    l_y_cat_transformed = lpu_dataset.l.cpu().numpy() * 2 + lpu_dataset.y.cpu().numpy()
+    split_indices_dict = index_group_split(np.arange(len(l_y_cat_transformed)), ratios_dict=ratios_dict, random_state=lpu.constants.RANDOM_STATE, strat_arr=l_y_cat_transformed)
+    for split in split_indices_dict.keys():
+        # *** DO NOT DELETE *** for the normal case where we have a LPU dataset
+        X, l, y, _ = lpu_dataset[split_indices_dict[split]]
+        dataset_dict[split] = lpu.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict={'X': X, 'l': l, 'y': y}, transform=transform, target_transform=target_transform)
+        samplers_dict[split], dataloaders_dict[split] = make_data_loader(dataset=dataset_dict[split], batch_size=config['batch_size'][split])
+
+    return dataloaders_dict

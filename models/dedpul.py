@@ -11,6 +11,9 @@ import lpu.constants
 import lpu.external_libs
 import lpu.models.geometric.elkanGGPC
 import lpu.models.lpu_model_base
+import lpu.external_libs.DEDPUL
+import lpu.external_libs.DEDPUL.algorithms
+import lpu.external_libs.DEDPUL.NN_functions
 
 LOG = logging.getLogger(__name__)
 
@@ -178,7 +181,7 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                 else:
                     discriminator = lpu.external_libs.DEDPUL.algorithms.all_convolution(hid_dim_full=hid_dim, bayes=bayes, bn=bn)
                 d_optimizer = optim.Adam(discriminator.parameters(), lr=lr, weight_decay=l2)
-
+                
                 DEDPUL.modified_train_NN(mix_data, pos_data, discriminator, d_optimizer,
                         mix_data_test, pos_data_test, nnre_alpha=alpha,
                         d_scheduler=None, training_mode=training_mode, bayes=bayes, **train_nn_options)
@@ -202,52 +205,122 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
         self.loss_type = config.get('loss_type', None)
         self.kde_mode = config.get('kde_mode', None)
         super().__init__(**kwargs)
-        self.descriminator = None
+        self.discriminator = None
         self.nrep = config.get('nrep', 1)
         self.learning_rate = config.get('learning_rate', 1e-4)
         self.n_neurons = config.get('n_neurons', 32)
+        self.MT_coef = self.config.get('MT_coef', 0.25)
+        self.bw_mix = self.config.get('bw_mix', 0.05)
+        self.bw_pos = self.config.get('bw_pos', 0.1)
+        self.dedepul_type = self.config['dedpul_type']
 
-    def set_C(self, holdout_dataloader, preds, dedepul_type='dedpul'):
+
+    def set_C(self, holdout_dataloader):
         try:
             assert (holdout_dataloader.batch_size == len(holdout_dataloader.dataset)), "There should be only one batch in the dataloader."
         except AssertionError as e:
             LOG.error(f"There should be only one batch in the dataloader, but {holdout_dataloader.batch_size} is smaller than {len(holdout_dataloader.dataset)}.")
             raise e
-        X, l, _ = next(iter(holdout_dataloader))
+        X, l, _, _ = next(iter(holdout_dataloader))
+        preds = self.discriminator(X).detach().cpu().numpy().reshape((-1, 1))
+        l = l.reshape((-1, 1))
         X = X.numpy()
         X = pd.DataFrame(X)
-        threshold = self.config.get('threshold', preds[l==1].mean()+preds[l==0].mean()/2)
-        MT_coef = self.config.get('MT_coef', 0.25)
-        bw_mix = self.config.get('bw_mix', 0.05)
-        bw_pos = self.config.get('bw_pos', 0.1)
-        diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds, l, bw_mix=bw_mix, bw_pos=bw_pos, kde_mode=self.kde_mode, threshold=threshold,
-                     MT=False, MT_coef=MT_coef, tune=False, decay_MT_coef=False, n_gauss_mix=20, n_gauss_pos=10,bins_mix=20, bins_pos=20, k_neighbours=None)
-        self.alpha, _ =  lpu.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, dedepul_type, alpha_as_mean_poster=True)
+        self.threshold = self.config.get('threshold', (preds[l==1].mean()+preds[l==0].mean())/2)
+        diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds, 1-l, bw_mix=self.bw_mix, bw_pos=self.bw_pos, kde_mode=self.kde_mode, threshold=self.threshold,
+                     MT=False, MT_coef=self.MT_coef, tune=False, decay_MT_coef=False, n_gauss_mix=20, n_gauss_pos=10,bins_mix=20, bins_pos=20, k_neighbours=None)
+        self.alpha, _ =  lpu.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, self.dedepul_type, alpha_as_mean_poster=True)
+        self.holdout_l_mean = l.mean()
+        self.C = self.holdout_l_mean * (1-self.alpha)
 
-        self.C = l.mean() / (1-self.alpha)
-
-    def train(self, dataloader):
-        try:
-            assert (dataloader.batch_size == len(dataloader.dataset)), "There should be only one batch in the dataloader."
-        except AssertionError as e:
-            LOG.error(f"There should be only one batch in the dataloader, but {dataloader.batch_size} is smaller than {len(dataloader.dataset)}.")
-            raise e
-        X, l, _ = next(iter(dataloader))
-        preds, self.discriminator = DEDPUL.modified_estimate_preds_cv(X, l, train_nn_options={
-                                        'n_epochs': 250, 'loss_function': 'log', 'batch_size': 64,
-                                        'n_batches': None, 'n_early_stop': 7, 'disp': False}, lr=self.learning_rate,
-                                )   
+    def train(self, dataloader, train_nn_options):
+        # try:
+        #     assert (dataloader.batch_size == len(dataloader.dataset)), "There should be only one batch in the dataloader."
+        # except AssertionError as e:
+        #     LOG.error(f"There should be only one batch in the dataloader, but {dataloader.batch_size} is smaller than {len(dataloader.dataset)}.")
+        #     raise e
+        all_X = []
+        all_l = []
+        for X, l, _, _  in dataloader:
+            all_X.append(X)
+            all_l.append(l)
+        all_X = torch.vstack(all_X)
+        all_l = torch.hstack(all_l)
+        all_l = 1 - all_l
+        preds, self.discriminator = DEDPUL.modified_estimate_preds_cv(all_X, all_l, train_nn_options=train_nn_options, lr=self.learning_rate)   
         return preds
 
     def predict_proba(self, X):
         self.discriminator.eval()
         return self.discriminator(torch.as_tensor(X, dtype=lpu.constants.DTYPE)).detach().numpy().flatten()
 
-    def predict_prob_y_given_x(self, X):
+    def predict_prob_y_given_X(self, X):
         return self.predict_proba(X) / self.C
     
-    def predict_prob_l_given_y_x(self, X):
+    def predict_prob_l_given_y_X(self, X):
         return self.C 
 
     def loss_fn(self, X_batch, l_batch):
-        return lpu.external_libs.DEDPUL.NN_functions.d_loss_standard(X_batch[l_batch == 0], X_batch[l_batch == 1], self.discriminator, self.loss_type)
+        return lpu.external_libs.DEDPUL.NN_functions.d_loss_standard(X_batch[l_batch == 1], X_batch[l_batch == 0], self.discriminator, self.loss_type)
+    
+
+    def validate(self, dataloader, holdoutloader):
+        y_probs = []
+        l_probs = []
+        y_vals = []
+        l_vals = []
+        y_ests = []
+        l_ests = []
+        losses = []
+        # self.set_C(dataloader)
+        holdout_all_X = []
+        holdout_all_l = []
+        holdout_all_y = []
+        for X_val, l_val, _, _ in holdoutloader:
+            holdout_all_X.append(X_val)
+            holdout_all_l.append(l_val)
+        holdout_all_X = torch.vstack(holdout_all_X)
+        holdout_all_l = torch.hstack(holdout_all_l).detach()
+        holdout_all_X = holdout_all_X[holdout_all_l == 1]
+        holdout_all_l = torch.zeros(((holdout_all_l==1).sum().to(int)))
+
+        all_X = []
+        all_l = []
+        all_y = []
+        for X_val, l_val, y_val, idx_val in dataloader:
+            all_X.append(X_val)
+            all_l.append(l_val)
+            all_y.append(y_val)
+        all_X = torch.vstack(all_X)
+        all_y = torch.hstack(all_y).detach().cpu().numpy()
+        all_l = torch.hstack(all_l).detach()
+        all_l = torch.ones_like(all_l)
+
+        all_X = torch.vstack((holdout_all_X, all_X))
+        all_l = torch.hstack((holdout_all_l, all_l))
+        preds = self.discriminator(all_X).detach().cpu().numpy().flatten()
+        diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds=preds, target=all_l, bw_mix=self.bw_mix, bw_pos=self.bw_pos, kde_mode=self.kde_mode, threshold=self.threshold,
+                    MT=False, MT_coef=self.MT_coef, tune=False, decay_MT_coef=False, n_gauss_mix=20, n_gauss_pos=10,bins_mix=20, bins_pos=20, k_neighbours=None)
+        self.alpha, poster =  lpu.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, self.dedepul_type, alpha_as_mean_poster=True)
+        y_probs = poster[len(holdout_all_l):]
+        l_probs = preds[len(holdout_all_l):]
+        l_vals = all_l[len(holdout_all_l):]
+        y_vals = all_y[len(holdout_all_l):]
+        # self.C = self.holdout_l_mean * (1-self.alpha)
+        # y_prob = self.modified_estimate_preds_cv(X_val, 1-l_val, train_nn_options=None)
+        # if hasattr(self, 'loss_fn'):
+        #     losses.append(self.loss_fn(all_X, all_l).item())
+        # else:
+        #     losses.append(0)
+
+        # y_probs = np.hstack(y_probs)
+        # y_vals = np.hstack(y_vals).astype(int)
+        # l_probs = np.hstack(l_probs)
+        # l_vals = np.hstack(l_vals).astype(int)
+        l_ests = l_probs > self.threshold
+        y_ests = y_probs > .5
+
+        validation_results = self._calculate_validation_metrics(
+            y_probs, y_vals, l_probs, l_vals, l_ests=l_ests, y_ests=y_ests)
+        validation_results.update({'overall_loss': np.mean(losses)})
+        return validation_results

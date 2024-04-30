@@ -58,16 +58,16 @@ class SARPU(lpu.models.lpu_model_base.LPUModelBase):
         propensity_attributes = np.ones_like(X[0]).astype(int)
         self.classification_model, self.propensity_model, self.results = sarpu.pu_learning.pu_learn_sar_em(X, l, classification_model=self.classification_model, propensity_attributes=propensity_attributes, max_its=self.max_iter)
         
-    def predict_prob_y_given_x(self, X):
+    def predict_prob_y_given_X(self, X):
         return self.classification_model.predict_proba(X)
 
-    def predict_prob_l_given_y_x(self, X):
+    def predict_prob_l_given_y_X(self, X):
         output = self.propensity_model.predict_proba(X)
         return output
     
     def loss_fn(self, X, l):
-        class_probabilities = self.predict_prob_y_given_x(X)
-        propensity_scores = self.predict_prob_l_given_y_x(X)
+        class_probabilities = self.predict_prob_y_given_X(X)
+        propensity_scores = self.predict_prob_l_given_y_X(X)
         return sarpu.pu_learning.loglikelihood_probs(class_probabilities, propensity_scores, l)
 
     

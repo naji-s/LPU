@@ -1,14 +1,15 @@
-lr: 0.01
+lr: 0.001
 wd: 0.0005
 momentum: 0.9
-data_type: None
+batch_size: 64
+data_type: mnist_17
 train_method: TEDn
 net_type: LeNet
 sigmoid_loss: true
 estimate_alpha: true
 warm_start: true
 warm_start_epochs: 50
-epochs: 500
+epochs: 200
 seed: 42
 alpha: 0.5
 beta: 0.5
@@ -28,8 +29,3 @@ ratios:
   val: 0.1 
   holdout: .05 
   train: .5 
-batch_size: 
-  train: 64
-  test: 64
-  val: 64
-  holdout: 64

@@ -1,222 +1,138 @@
+
+import copy
 import sys
 
-import lpu.external_libs.PU_learning.utils
-sys.path.append('lpu/external_libs/PU_learning')
 
-import torch.cuda
+
+sys.path.append('lpu/external_libs/PU_learning')
+sys.path.append('lpu/external_libs/PU_learning/data_helper')
+import lpu.external_libs.PU_learning.helper
+import lpu.external_libs.PU_learning.utils
+
+from matplotlib import pyplot as plt
 import torch.nn
+import torch.utils.data
 import numpy as np
 
 import lpu.constants
-import lpu.utils.utils_general
-import lpu.external_libs.PU_learning
-import lpu.external_libs.PU_learning.algorithm
-import lpu.external_libs.PU_learning.baselines
-import lpu.external_libs.PU_learning.data_helper
-import lpu.external_libs.PU_learning.estimator
-import lpu.external_libs.PU_learning.train_PU
-import lpu.external_libs.PU_learning.data_helper
-import lpu.external_libs.PU_learning.helper
-import lpu.datasets.LPUDataset
 import lpu.datasets.dataset_utils
-import lpu.external_libs.PU_learning.model_helper
-import lpu.models.lpu_model_base
+import lpu.datasets.LPUDataset
+import lpu.external_libs.PU_learning.algorithm
+import lpu.models.mpe_model
+import lpu.utils.utils_general
 
-import types
-import unittest.mock
 
-class MultiLayerPerceptron(torch.nn.Module):
-    def __init__(self, dim):
-        super(MultiLayerPerceptron, self).__init__()
 
-        self.input_dim = dim
-
-        self.l1 = torch.nn.Linear(dim, 300, bias=False)
-        self.b1 = torch.nn.BatchNorm1d(300)
-        self.l2 = torch.nn.Linear(300, 300, bias=False)
-        self.b2 = torch.nn.BatchNorm1d(300)
-        self.l3 = torch.nn.Linear(300, 300, bias=False)
-        self.b3 = torch.nn.BatchNorm1d(300)
-        self.l4 = torch.nn.Linear(300, 300, bias=False)
-        self.b4 = torch.nn.BatchNorm1d(300)
-        self.l5 = torch.nn.Linear(300, 2)
-        self.af = torch.nn.functional.relu
-
-    def forward(self, x):
-        x = x.view(-1, self.input_dim)
-        h = self.l1(x)
-        h = self.b1(h)
-        h = self.af(h)
-        h = self.l2(h)
-        h = self.b2(h)
-        h = self.af(h)
-        h = self.l3(h)
-        h = self.b3(h)
-        h = self.af(h)
-        h = self.l4(h)
-        h = self.b4(h)
-        h = self.af(h)
-        h = self.l5(h)
-        return h
     
-class MPE(lpu.models.lpu_model_base.LPUModelBase):
-    def __init__(self, config):
-        super(MPE, self).__init__()
-        self.config = config
-        self.alpha_estimate = 0.0
-        self.device = config['device']
-        self.true_alpha = config['alpha']
-        self.beta = config['beta']
-
-    def initialize_model(self, dim):
-        self.net = MultiLayerPerceptron(dim=dim)
-        if self.config['device'].startswith('cuda'):
-            self.net = torch.nn.DataParallel(self.net)
-            torch.cudnn.benchmark = True
-        
-    def estimate_alpha(self, p_holdoutloader, u_holdoutloader):
-        """
-        Estimates the alpha value using the BBE estimator.
-
-        NOTE: in the original code (https://github.com/acmi-lab/PU_learning/blob/5e5e350dc0588de95a36eb952e3cf5382e786aec/train_PU.py#L130)
-        alpha is estimated using validation set, which is also used as the test set. This is not a good practice, hence below we use the holdout set.
-
-        Args:
-            net (object): The neural network model.
-            self.config (dict): Configuration parameters.
-            p_holdoutloader (object): DataLoader for positive holdout data.
-            u_holdoutloader (object): DataLoader for unlabeled holdout data.
-
-        Returns:
-            float: The estimated alpha value.
-
-        Raises:
-            None
-
-        """
-        pos_probs = lpu.external_libs.PU_learning.algorithm.p_probs(self.net, self.device, p_holdoutloader)
-        unlabeled_probs, unlabeled_targets = lpu.external_libs.PU_learning.algorithm.u_probs(self.net, self.device, u_holdoutloader)
-
-        mpe_estimate, _, _ = lpu.external_libs.PU_learning.estimator.BBE_estimator(pos_probs, unlabeled_probs, unlabeled_targets)
-        return mpe_estimate
-    
-    def estimate_alpha(
-        self, 
-        p_holdoutloader, 
-        u_holdoutloader):
-        pos_probs = lpu.external_libs.PU_learning.estimator.p_probs(self.net, self.device, p_holdoutloader)
-        unlabeled_probs, unlabeled_targets = lpu.external_libs.PU_learning.estimator.u_probs(self.net, self.device, u_holdoutloader)
-        """
-
-        """
-
-        mpe_estimate, _, _ = lpu.external_libs.PU_learning.estimator.BBE_estimator(pos_probs, unlabeled_probs, unlabeled_targets)
-        return mpe_estimate
-
-
-    def warm_up_one_epoch(self, epoch, p_trainloader, u_trainloader, optimizer, criterion, u_validloader):
-        train_acc = lpu.external_libs.PU_learning.algorithm.train(epoch, self.net, p_trainloader, u_trainloader, \
-        optimizer=optimizer, criterion=criterion, device=self.device, show_bar=self.config['show_bar'])
-
-        valid_acc = lpu.external_libs.PU_learning.algorithm.validate(epoch, self.net, u_validloader, \
-                criterion=criterion, device=self.device, threshold=0.5*self.beta/(self.beta + (1-self.beta)*self.true_alpha),show_bar=self.config['show_bar'])
-        
-        return train_acc, valid_acc 
-    
-
-    def train_on_epoch(self, epoch, p_trainloader, u_trainloader, optimizer, criterion, alpha_used, train_unlabeled_size):
-        keep_samples, _ = lpu.external_libs.PU_learning.train_PU.rank_inputs(epoch, self.net, u_trainloader, self.device,\
-            alpha_used, u_size=train_unlabeled_size)
-        
-        train_acc = lpu.external_libs.PU_learning.train_PU.train_PU_discard(epoch, self.net,  p_trainloader, u_trainloader,\
-            optimizer, criterion, self.device, keep_sample=keep_samples,show_bar=self.config['show_bar'])
-        return train_acc
-    def predict_proba(self, X):
-        return self.net(X)
-
 LEARNING_RATE = 0.01
 INDUCING_POINTS_SIZE = 32
 BATCH_SIZE = 32
-TRAIN_VAL_RATIO = .1
-ELKAN_HOLD_OUT_SIZE = 0.1
-TRAIN_TEST_RATIO = .5
+HOLDOUT_RATIO = 0.05
+VAL_RATIO = 0.10
+TEST_RATIO = 0.35
 
-
-def create_mpe_datasets(lpu_dataset, double_unlabeled=False):
-    _, _, _, _, train_indices, test_indices, val_indices, holdout_indices = lpu.datasets.dataset_utils.create_stratified_splits(lpu_dataset, train_val_ratio=TRAIN_VAL_RATIO, batch_size=BATCH_SIZE, hold_out_size=ELKAN_HOLD_OUT_SIZE, train_test_ratio=TRAIN_TEST_RATIO, return_indices=True)
-    unlabeled_train_indices = train_indices[lpu_dataset.l[train_indices]==0]
-    unlabeled_val_indices = val_indices[lpu_dataset.l[val_indices]==0]
-    unlabeled_holdout_indices = holdout_indices[lpu_dataset.l[holdout_indices]==0]
-    unlabeled_test_indices = test_indices[lpu_dataset.l[test_indices]==0]
-
-    p_train_indices = train_indices[lpu_dataset.l[train_indices]==1]
-    p_val_indices = val_indices[lpu_dataset.l[val_indices]==1]
-    p_holdout_indices = holdout_indices[lpu_dataset.l[holdout_indices]==1]
-    p_test_indices = test_indices[lpu_dataset.l[test_indices]==1]
-
-    X_tensor = torch.tensor(lpu_dataset.X, dtype=lpu.constants.DTYPE)
-
-    PDataset_train = lpu.external_libs.PU_learning.helper.PosData(
-        transform=lpu_dataset.transform, target_transform=None, data=X_tensor[p_train_indices], index=np.arange(len(p_train_indices)))
-    UDataset_train = lpu.external_libs.PU_learning.helper.UnlabelData(
-        transform=lpu_dataset.transform, target_transform=None, 
-        pos_data=X_tensor[train_indices][lpu_dataset.y[train_indices]==1], 
-        neg_data=X_tensor[train_indices][lpu_dataset.y[train_indices]==0],
-        index=np.arange(len(train_indices)))
     
-    PDataset_test = lpu.external_libs.PU_learning.helper.PosData(
-        transform=lpu_dataset.transform, target_transform=None, data=X_tensor[p_test_indices], index=np.arange(len(p_test_indices)))
-    UDataset_test = lpu.external_libs.PU_learning.helper.UnlabelData(
-        transform=lpu_dataset.transform, target_transform=None, 
-        pos_data=X_tensor[unlabeled_test_indices][lpu_dataset.y[unlabeled_test_indices]==1], 
-        neg_data=X_tensor[unlabeled_test_indices][lpu_dataset.y[unlabeled_test_indices]==0],
-        index=np.arange(len(unlabeled_test_indices)))
-    
-    PDataset_val = lpu.external_libs.PU_learning.helper.PosData(
-        transform=lpu_dataset.transform, target_transform=None, data=X_tensor[p_val_indices], index=np.arange(len(p_val_indices)))
-    UDataset_val = lpu.external_libs.PU_learning.helper.UnlabelData(
-        transform=lpu_dataset.transform, target_transform=None, 
-        pos_data=X_tensor[val_indices][lpu_dataset.y[val_indices]==1], 
-        neg_data=X_tensor[val_indices][lpu_dataset.y[val_indices]==0],
-        index=np.arange(len(val_indices)))
-    
-    PDataset_holdout = lpu.external_libs.PU_learning.helper.PosData(
-        transform=lpu_dataset.transform, target_transform=None, data=X_tensor[p_holdout_indices], index=np.arange(len(p_holdout_indices)))
-    UDataset_holdout = lpu.external_libs.PU_learning.helper.UnlabelData(
-        transform=lpu_dataset.transform, target_transform=None, 
-        pos_data=X_tensor[holdout_indices][lpu_dataset.y[holdout_indices]==1], 
-        neg_data=X_tensor[holdout_indices][lpu_dataset.y[holdout_indices]==0],
-        index=np.arange(len(holdout_indices)))
+def create_dataloaders_dict_mpe(config):
+    dataloders_dict = {}
+    samplers_dict = {}
+    mpe_dataset_dict = {}
+    mpe_dataloaders_dict = {}
+    mpe_indices_dict = {}
+    ratios_dict = config['ratios']
+    if config['dataset_kind'] == 'LPU':
+        lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')    
+        l_y_cat_transformed = lpu_dataset.l.cpu().numpy() * 2 + lpu_dataset.y.cpu().numpy()
+        split_indices_dict = lpu.datasets.dataset_utils.index_group_split(np.arange(len(l_y_cat_transformed)), ratios_dict=ratios_dict, random_state=lpu.constants.RANDOM_STATE, strat_arr=l_y_cat_transformed)
+        for split in split_indices_dict.keys():
+            # *** DO NOT DELETE *** for the normal case where we have a LPU dataset
+            samplers_dict[split], dataloders_dict[split] = lpu.datasets.dataset_utils.make_data_loader(lpu_dataset, split_indices_dict[split], batch_size=BATCH_SIZE)
 
-    return PDataset_train, UDataset_train, PDataset_test, UDataset_test, PDataset_val, UDataset_val, PDataset_holdout, UDataset_holdout
+            mpe_dataset_dict[split], mpe_indices_dict[split] = lpu.datasets.dataset_utils.LPUD_to_MPED(lpu_dataset=lpu_dataset, indices=split_indices_dict[split], double_unlabeled=False)
+            mpe_dataloaders_dict[split] = {}
+            for dataset_type in mpe_dataset_dict[split].keys():
+                mpe_dataloaders_dict[split][dataset_type] = torch.utils.data.DataLoader(mpe_dataset_dict[split][dataset_type], batch_size=config['batch_size'][split], shuffle=True)
+    elif config['dataset_kind'] == 'MPE':
+        p_trainloader, u_trainloader, p_validloader, u_validloader, net, X, Y, p_validdata, u_validdata, u_traindata, p_traindata = \
+                lpu.external_libs.PU_learning.helper.get_dataset(config['data_dir'], config['data_type'], config['net_type'], config['device'], config['alpha'], config['beta'], config['batch_size'])
+
+
+        mpe_dataloaders_dict['train']= {}
+        mpe_dataloaders_dict['test'] ={}
+        mpe_dataloaders_dict['val'] = {}
+        mpe_dataloaders_dict['holdout'] = {}
+
+        mpe_dataloaders_dict['train']['PDataset'] = p_trainloader
+        mpe_dataloaders_dict['train']['UDataset'] = u_trainloader
+
+        mpe_dataloaders_dict['test']['PDataset'] = p_validloader
+        mpe_dataloaders_dict['test']['UDataset'] = u_validloader
+
+        mpe_dataloaders_dict['holdout']['PDataset'] = p_validloader
+        mpe_dataloaders_dict['holdout']['UDataset'] = u_validloader
+
+
+        mpe_dataloaders_dict['val']['PDataset'] = p_validloader
+        mpe_dataloaders_dict['val']['UDataset'] = u_validloader
+    else:
+        raise ValueError("Dataset needs to be either LPU or MPE")
+    return mpe_dataloaders_dict
+
+def plot_scores(scores_dict, loss_type='L_mpe'):
+    fig, ax = plt.subplots(5, 1, figsize=(10, 10))
+    # Calculate the index of the minimum Total Loss
+    min_loss_index = np.argmin(scores_dict['val'][loss_type])  # Index of minimum Total Loss
+
+    # AUC Plot
+    ax[0].plot(scores_dict['val']['y_auc'], label='val AUC')
+    ax[0].plot(min_loss_index, scores_dict['val']['y_auc'][min_loss_index], 'rx', markersize=10, label='Min Total Loss')  # Mark the min Total Loss point
+    ax[0].set_title('AUC')
+    ax[0].legend()
+
+    # Accuracy Plot
+    ax[1].plot(scores_dict['val']['y_accuracy'], label='val Accuracy')
+    ax[1].plot(min_loss_index, scores_dict['val']['y_accuracy'][min_loss_index], 'rx', markersize=10, label='Min Total Loss')  # Mark the min Total Loss point
+    ax[1].set_title('val Accuracy')
+
+    # Test AUC and Accuracy Plot
+    ax[2].plot(scores_dict['test']['y_auc'], label='Test AUC')
+    ax[2].plot(min_loss_index, scores_dict['test']['y_auc'][min_loss_index], 'rx', markersize=10, label='Min Total Loss')  # Mark the min point
+    ax[2].set_title('Test AUC')
+
+    ax[3].plot(scores_dict['test']['y_accuracy'], label='Test Accuracy')
+    ax[3].plot(min_loss_index, scores_dict['test']['y_accuracy'][min_loss_index], 'rx', markersize=10, label='Min Total Loss')  # Mark the min point
+    ax[3].set_title(f'Test Accuracy')
+
+    ax[4].plot(scores_dict['train'][loss_type], label=f'train {loss_type}')
+    ax[4].plot(min_loss_index, scores_dict['train'][loss_type][min_loss_index], 'rx', markersize=10, label='Min Total Loss')  # Mark the min point
+    ax[4].set_title(f'train {loss_type}')
+
+    ax[4].plot(scores_dict['val'][loss_type], label=f'val {loss_type}')
+    ax[4].plot(min_loss_index, scores_dict['val'][loss_type][min_loss_index], 'rx', markersize=10, label='Min Total Loss')  # Mark the min point
+    ax[4].set_title(f'val {loss_type}')
+
+    ax[4].plot(scores_dict['test'][loss_type], label=f'test {loss_type}')
+    ax[4].plot(min_loss_index, scores_dict['test'][loss_type][min_loss_index], 'rx', markersize=10, label='Min Total Loss')  # Mark the min point
+    ax[4].set_title(f'Test {loss_type}')
+
+
+    plt.tight_layout()  # Adjust subplots to fit into figure area.
+    plt.legend()
+    plt.show()
+
 
 def main():
+    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
     yaml_file_path = '/Users/naji/phd_codebase/lpu/configs/mpe_config.yaml'
     config = lpu.utils.utils_general.load_and_process_config(yaml_file_path)
-    alpha_estimate = 0.0
+    
     criterion = torch.nn.CrossEntropyLoss()
 
-    lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')
-#    passing X to initialize_inducing_points to extract the initial values of inducing points
+    mpe_model = lpu.models.mpe_model.MPE(config)
 
-    (PDataset_train, UDataset_train, 
-        PDataset_test, UDataset_test, 
-            PDataset_val, UDataset_val, 
-                PDataset_holdout, UDataset_holdout) = create_mpe_datasets(lpu_dataset)
-    p_trainloader = torch.utils.data.DataLoader(PDataset_train, batch_size=config['batch_size'], shuffle=True)
-    u_trainloader = torch.utils.data.DataLoader(UDataset_train, batch_size=config['batch_size'], shuffle=True)
-    p_validloader = torch.utils.data.DataLoader(PDataset_val, batch_size=config['batch_size'], shuffle=True)
-    u_validloader = torch.utils.data.DataLoader(UDataset_val, batch_size=config['batch_size'], shuffle=True)
-    p_holdoutloader = torch.utils.data.DataLoader(PDataset_holdout, batch_size=config['batch_size'], shuffle=True)
-    u_holdoutloader = torch.utils.data.DataLoader(UDataset_holdout, batch_size=config['batch_size'], shuffle=True)
-    p_testloader = torch.utils.data.DataLoader(PDataset_test, batch_size=config['batch_size'], shuffle=True)
-    u_testloader = torch.utils.data.DataLoader(UDataset_test, batch_size=config['batch_size'], shuffle=True)
+    mpe_dataloaders_dict = create_dataloaders_dict_mpe(config)
+    mpe_model.initialize_model(mpe_dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
+    train_unlabeled_size = len(mpe_dataloaders_dict['train']['UDataset'].dataset.data)
 
-    mpe_model = MPE(config)
-    mpe_model.initialize_model(lpu_dataset.X.shape[1])
-
-
-    train_unlabeled_size = len(u_trainloader.dataset)
 
     if config['optimizer']=="SGD":
         optimizer = torch.optim.SGD(mpe_model.net.parameters(), lr=config['lr'], momentum=config['momentum'], weight_decay=config['wd'])
@@ -227,41 +143,43 @@ def main():
 
     ## Train in the begining for warm start
     if config['warm_start']: 
-        # outfile.write("Warm_start: \n")
         for epoch in range(config['warm_start_epochs']): 
-            train_acc, valid_acc = mpe_model.warm_up_one_epoch(epoch=epoch, p_trainloader=p_trainloader, u_trainloader=u_trainloader, optimizer=optimizer, criterion=criterion, u_validloader=u_validloader)
+            mpe_model.warm_up_one_epoch(epoch=epoch, p_trainloader=mpe_dataloaders_dict['train']['PDataset'], u_trainloader=mpe_dataloaders_dict['train']['UDataset'], optimizer=optimizer, criterion=criterion, valid_loader=None)
             if config['estimate_alpha']: 
-                alpha_estimate = mpe_model.estimate_alpha(p_holdoutloader=p_holdoutloader, u_holdoutloader=u_holdoutloader)
-            print ("Epoch: ", epoch, "Alpha: ", alpha_estimate)
+                mpe_model.alpha_estimate = mpe_model.estimate_alpha(p_holdoutloader=mpe_dataloaders_dict['holdout']['PDataset'], u_holdoutloader=mpe_dataloaders_dict['holdout']['UDataset'])
+                mpe_model.set_C(l_mean=len(mpe_dataloaders_dict['holdout']['PDataset']) / (len(mpe_dataloaders_dict['holdout']['UDataset']) + len(mpe_dataloaders_dict['holdout']['PDataset'])))
+            print ("Epoch: ", epoch, "Alpha: ", mpe_model.alpha_estimate)
 
-    alpha_used = alpha_estimate
-
+    scores_dict = {}
+    for split in mpe_dataloaders_dict.keys():
+        scores_dict[split] = {}
+                   
     for epoch in range(config['epochs']):
-        if config['use_alpha']: 
-            alpha_used =  alpha_estimate
-        else:
-            alpha_used = config['alpha']
-        train_acc = mpe_model.train_on_epoch(epoch=epoch, p_trainloader=p_trainloader, 
-                       u_trainloader=u_trainloader, optimizer=optimizer, criterion=criterion, 
-                       alpha_used=alpha_used, train_unlabeled_size=train_unlabeled_size)
+        for split in mpe_dataloaders_dict.keys():
+            scores_dict_item = mpe_model.validate(None, mpe_dataloaders_dict[split]['PDataset'], mpe_dataloaders_dict[split]['UDataset'], criterion=criterion, threshold=0.5)
+            for score_type in scores_dict_item.keys():
+                if score_type in scores_dict[split].keys():
+                    scores_dict[split][score_type].append(scores_dict_item[score_type])
+                else:
+                    scores_dict[split][score_type] = [scores_dict_item[score_type]]
 
-        valid_acc = lpu.external_libs.PU_learning.algorithm.validate(epoch, mpe_model.net, u_validloader, 
-                                                                     criterion=criterion, device=mpe_model.device, 
-                                                                     threshold=0.5*config['beta']/(config['beta'] + (1-config['beta'])*config['alpha']), 
-                                                                     show_bar=config['show_bar'])
-        
+        mpe_model.train_one_epoch(epoch=epoch, p_trainloader=mpe_dataloaders_dict['train']['PDataset'], 
+                       u_trainloader=mpe_dataloaders_dict['train']['UDataset'], optimizer=optimizer, criterion=criterion, 
+                       train_unlabeled_size=train_unlabeled_size)
+
         if config['estimate_alpha']: 
-            mpe_model.estimate_alpha(p_holdoutloader, u_holdoutloader)
-        print ("Epoch: ", epoch, "Train Acc: ", train_acc, "Valid Acc: ", valid_acc)
+            mpe_model.alpha_estimate = mpe_model.estimate_alpha(mpe_dataloaders_dict['holdout']['PDataset'], mpe_dataloaders_dict['holdout']['UDataset'])
+            mpe_model.set_C(l_mean=len(mpe_dataloaders_dict['holdout']['PDataset']) / (len(mpe_dataloaders_dict['holdout']['UDataset']) + len(mpe_dataloaders_dict['holdout']['PDataset'])))
+
+    for split in mpe_dataloaders_dict.keys():
+        for score_type in scores_dict_item.keys():
+            scores_dict[split][score_type] = np.asarray(scores_dict[split][score_type]).flatten()
+
+    plot_scores(scores_dict)
+
+
 
 if __name__ == "__main__":
-    # yaml_file_path = '/Users/naji/phd_codebase/lpu/configs/mpe_config.yaml'
-    # config = lpu.utils.utils_general.load_and_process_config(yaml_file_path)
+    import warnings
+    warnings.simplefilter("error", category=UserWarning)
     main()
-    # lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal', normalize=False, invert_l=False)
-    # train_loader, test_loader, val_loader, holdout_loader = lpu.datasets.dataset_utils.create_stratified_splits(lpu_dataset, train_val_ratio=TRAIN_VAL_RATIO, batch_size=len(lpu_dataset), hold_out_size=HOLD_OUT_SIZE, train_test_ratio=TRAIN_TEST_RATIO)
-    # passing X to initialize_inducing_points to extract the initial values of inducing points
-    # nnPU_model = lpu.models.nnPU.nnPU(self.config)
-    # args = types.SimpleNamespace(**config)
-    # sys.path.append('/Users/naji/phd_codebase/lpu/external_libs/nnPUSB')
-    # main(args, self.config)

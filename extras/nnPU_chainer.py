@@ -19,7 +19,7 @@ import six
 
 import lpu.constants
 import lpu.external_libs
-import lpu.models.dedpul
+import lpu.extras.dedpul_by_mpe
 import lpu.models.geometric.elkanGGPC
 import lpu.models.lpu_model_base
 import lpu.external_libs.nnPUlearning.train

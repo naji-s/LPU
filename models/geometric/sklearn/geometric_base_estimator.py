@@ -85,7 +85,7 @@ class GeometricBaseEstimator(sklearn.base.BaseEstimator):
     def predict_proba(self, X):
         """
         Predicts the probability of l given X, i.e. p(l|X).
-        Note that this is not the same as predict_prob_l_given_y_x. 
+        Note that this is not the same as predict_prob_l_given_y_X. 
         In fact, due to p(y=1|l=1) = 1, 
 
                     p(l|X) = p(l|y=1, X) * p(y=1|X)
@@ -98,7 +98,7 @@ class GeometricBaseEstimator(sklearn.base.BaseEstimator):
         """
         pass
 
-    def predict_prob_l_given_y_x(self, X):
+    def predict_prob_l_given_y_X(self, X):
         """
         Predicts the probability of label l given input features X and y=1,
         i.e. p(l|y=1, X).
@@ -111,7 +111,7 @@ class GeometricBaseEstimator(sklearn.base.BaseEstimator):
         """
         pass
 
-    def predict_prob_y_given_x(self, X):
+    def predict_prob_y_given_X(self, X):
         """
         Predicts the probability of y given x.
 

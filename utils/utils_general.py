@@ -1,4 +1,7 @@
 import lpu.constants
+import numpy as np
+import random
+import torch
 import yaml  # Import the yaml module to work with YAML files.
 
 def load_and_process_config(yaml_file_path):
@@ -33,3 +36,18 @@ def load_and_process_config(yaml_file_path):
     # Return the processed YAML content. The 'yaml.safe_load' function safely parses the YAML string
     # and returns it as a Python dictionary or list, depending on the YAML structure.
     return yaml_content
+
+
+def set_seed(seed):
+    """
+    Set the random seed for reproducible results.
+    Args:
+        seed (int): The seed value to set.
+    """
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)  # For CUDA devices
+    torch.cuda.manual_seed_all(seed)  # If you are using multi-GPU
+    np.random.seed(seed)  # For NumPy
+    random.seed(seed)  # For Python's `random` module
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False

@@ -5,6 +5,7 @@ import torch
 
 import lpu.constants
 import lpu.datasets.animal_no_animal.animal_no_animal_utils
+import lpu.datasets.dataset_utils
 import lpu.utils.dataset_utils  
 
 class LPUModelBase(torch.nn.Module):
@@ -100,17 +101,36 @@ class LPUModelBase(torch.nn.Module):
             dict: A dictionary containing the validation metrics.
         """
         metrics = {}
+        metrics['l_accuracy'] = sklearn.metrics.accuracy_score(l_vals, l_ests)
+        
+        for arr in [l_vals, y_vals, l_ests, y_ests]:
+            if all(arr):
+                idx = np.random.randint(len(arr))
+                arr[idx] = 0
+            if not any(arr):
+                idx = np.random.randint(len(arr))
+                arr[idx] = 1
+        
+
+        metrics['l_precision'] = sklearn.metrics.precision_score(l_vals, l_ests)
+        metrics['l_auc'] = sklearn.metrics.roc_auc_score(l_vals, l_probs)
+        metrics['l_recall'] = sklearn.metrics.recall_score(l_vals, l_ests)
+        metrics['l_f1'] = sklearn.metrics.f1_score(l_vals, l_ests)
+        metrics['l_APS'] = sklearn.metrics.average_precision_score(l_vals, l_probs)
+        
         metrics['y_accuracy'] = sklearn.metrics.accuracy_score(y_vals, y_ests)
         metrics['y_auc'] = sklearn.metrics.roc_auc_score(y_vals, y_probs)
-        metrics['l_accuracy'] = sklearn.metrics.accuracy_score(l_vals, l_ests)
-        metrics['l_auc'] = sklearn.metrics.roc_auc_score(l_vals, l_probs)
+        metrics['y_precision'] = sklearn.metrics.precision_score(y_vals, y_ests)
+        metrics['y_recall'] = sklearn.metrics.recall_score(y_vals, y_ests)
+        metrics['y_f1'] = sklearn.metrics.f1_score(y_vals, y_ests)
+        metrics['y_APS'] = sklearn.metrics.average_precision_score(y_vals, y_probs)
+
+
         metrics['y_ll'] = sklearn.metrics.log_loss(y_vals, y_probs)
         metrics['l_ll'] = sklearn.metrics.log_loss(l_vals, l_probs)
         return metrics
     
-    def validate(self, dataloader):
-        if len(dataloader) == 0:
-            return None, None
+    def validate(self, dataloader, loss_fn=None, output_model=None):
         y_probs = []
         l_probs = []
         y_vals = []
@@ -118,27 +138,29 @@ class LPUModelBase(torch.nn.Module):
         y_ests = []
         l_ests = []
         losses = []
-        for X_val, l_val, y_val in dataloader:
-            y_prob = self.predict_prob_y_given_X(X_val)
-            l_prob = self.predict_proba(X_val)
-            l_est = self.predict(X_val)
-            y_est = self.predict_y_given_X(X_val)
-            y_probs.append(y_prob)
-            y_vals.append(y_val)
-            l_probs.append(l_prob)
-            l_vals.append(l_val)
-            y_ests.append(y_est)
-            l_ests.append(l_est)
-            if hasattr(self, 'loss_fn'):
-                losses.append(self.loss_fn(X_val, l_val).item())
-        y_probs = np.hstack(y_probs)
-        y_vals = np.hstack(y_vals).astype(int)
-        l_probs = np.hstack(l_probs)
-        l_vals = np.hstack(l_vals).astype(int)
-        l_ests = np.hstack(l_ests).astype(int)
-        y_ests = np.hstack(y_ests).astype(int)
-
-        validation_results = self._calculate_validation_metrics(
-            y_probs, y_vals, l_probs, l_vals, l_ests=l_ests, y_ests=y_ests)
-        validation_results.update({'overall_loss': np.mean(losses)})
-        return validation_results
+        with torch.no_grad():
+            for X_val, l_val, y_val, idx_val in dataloader:
+                y_prob = self.predict_prob_y_given_X(X_val)
+                l_prob = self.predict_proba(X_val)
+                l_est = self.predict(X_val)
+                y_est = self.predict_y_given_X(X_val)
+                y_probs.append(y_prob)
+                y_vals.append(y_val)
+                l_probs.append(l_prob)
+                l_vals.append(l_val)
+                y_ests.append(y_est)
+                l_ests.append(l_est)
+                if loss_fn:
+                    losses.append(loss_fn(output_model(X_val), l_val).item())
+                else:
+                    losses.append(0)
+            y_probs = np.hstack(y_probs)
+            y_vals = np.hstack(y_vals).astype(int)
+            l_probs = np.hstack(l_probs)
+            l_vals = np.hstack(l_vals).astype(int)
+            l_ests = np.hstack(l_ests).astype(int)
+            y_ests = np.hstack(y_ests).astype(int)
+            validation_results = self._calculate_validation_metrics(
+                y_probs, y_vals, l_probs, l_vals, l_ests=l_ests, y_ests=y_ests)
+            validation_results.update({'overall_loss': np.mean(losses)})
+            return validation_results
