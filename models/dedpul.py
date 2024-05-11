@@ -48,7 +48,6 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
             target_test = np.concatenate((np.zeros((pos_data_test.shape[0],)), np.ones((mix_data_test.shape[0],))))
 
         for epoch in range(n_epochs):
-
             discriminator.train()
 
             d_losses_cur = []
@@ -123,8 +122,8 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                                 break
                     if if_stop:
                         break
-            elif disp:
-                print('epoch', epoch, ', train_loss=', d_losses_train[-1])
+            # elif disp:
+            print('epoch', epoch, ', train_loss=', d_losses_train[-1])
 
         discriminator.eval()
 
@@ -180,7 +179,9 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                                                     n_hid_layers=n_hid_layers, bayes=bayes, bn=bn)
                 else:
                     discriminator = lpu.external_libs.DEDPUL.algorithms.all_convolution(hid_dim_full=hid_dim, bayes=bayes, bn=bn)
+                discriminator.to(lpu.constants.DTYPE)
                 d_optimizer = optim.Adam(discriminator.parameters(), lr=lr, weight_decay=l2)
+
                 
                 DEDPUL.modified_train_NN(mix_data, pos_data, discriminator, d_optimizer,
                         mix_data_test, pos_data_test, nnre_alpha=alpha,
@@ -199,7 +200,167 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
             means, variances = means.mean(axis=0), variances.mean(axis=0)
             return preds, means, variances
         else:
-            return preds, discriminator 
+            return preds, discriminator
+        
+    def modified_estimate_poster_em(diff=None, preds=None, target=None, mode='dedpul', converge=True, tol=10**-5,
+                        max_iterations=1000, nonconverge=True, step=0.001, max_diff=0.05, plot=False, disp=False,
+                        alpha=None, alpha_as_mean_poster=True, **kwargs):
+        """
+        identical to https://github.com/dimonenka/DEDPUL/blob/04c028101a509b2efe3d55de457b5df92439bb59/algorithms.py#L371
+        except that the model variable types has been changed to lpu.constants.DTYPE
+        corrected method locations since they're being imported from lpu.external_libs.DEDPUL.algorithms
+        and also removed plotting logic
+
+
+        Performs Expectation-Maximization to estimate posteriors and priors alpha (if not provided) of N in U
+            with either of 'en' or 'dedpul' methods; both 'converge' and 'nonconverge' are recommended to be set True for
+            better estimate
+        :param diff: difference of densities f_p/f_u for the sample U, np.array (n,), output of estimate_diff()
+        :param preds: predictions of classifier, np.array with shape (n,)
+        :param target: binary vector, 0 if positive, 1 if unlabeled, np.array with shape (n,)
+        :param mode: 'dedpul' or 'en'; if 'dedpul', diff needs to be provided; if 'en', preds and target need to be provided
+        :param converge: True or False; True if convergence estimate should be computed
+        :param tol: tolerance of error between priors and mean posteriors, indicator of convergence
+        :param max_iterations: if exceeded, search of converged alpha stops even if tol is not reached
+        :param nonconverge: True or False; True if non-convergence estimate should be computed
+        :param step: gap between points of the [0, 1, step] gird to choose best alpha from
+        :param max_diff: alpha with difference of mean posteriors and priors bigger than max_diff cannot be chosen;
+            an heuristic to choose bigger alpha
+        :param plot: True or False, if True - plots ([0, 1, grid], mean posteriors - alpha) and
+            ([0, 1, grid], second lag of (mean posteriors - alpha))
+        :param disp: True or False, if True - displays if the algorithm didn't converge
+        :param alpha: proportions of N in U; is estimated if None
+        :return: tuple (alpha, poster), e.g. (priors, posteriors) of N in U for the U sample
+        """
+        assert converge + nonconverge, "At least one of 'converge' and 'nonconverge' has to be set to 'True'"
+
+        if alpha is not None:
+            if mode == 'dedpul':
+                alpha, poster = lpu.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha, alpha_as_mean_poster=alpha_as_mean_poster, tol=tol, **kwargs)
+            elif mode == 'en':
+                _, poster = lpu.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha, **kwargs)
+            return alpha, poster
+
+        # if converge:
+        alpha_converge = 0
+        for i in range(max_iterations):
+
+            if mode.endswith('dedpul'):
+                _, poster_converge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha_converge, **kwargs)
+            elif mode == 'en':
+                _, poster_converge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha_converge, **kwargs)
+
+            mean_poster = np.mean(poster_converge)
+            error = mean_poster - alpha_converge
+
+            if np.abs(error) < tol:
+                break
+            if np.min(poster_converge) > 0:
+                break
+            alpha_converge = mean_poster
+
+        if disp:
+            if i >= max_iterations - 1:
+                print('max iterations exceeded')
+
+        # if nonconverge:
+
+        errors = np.array([])
+        for alpha_nonconverge in np.arange(0, 1, step):
+
+            if mode.endswith('dedpul'):
+                _, poster_nonconverge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha_nonconverge, **kwargs)
+            elif mode == 'en':
+                _, poster_nonconverge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha_nonconverge, **kwargs)
+            errors = np.append(errors, np.mean(poster_nonconverge) - alpha_nonconverge)
+
+        idx = np.argmax(np.diff(np.diff(errors))[errors[1: -1] < max_diff])
+        alpha_nonconverge = np.arange(0, 1, step)[1: -1][errors[1: -1] < max_diff][idx]
+
+
+        if ((alpha_nonconverge >= alpha_converge) or#converge and nonconverge and
+            (((errors < 0).sum() > 1) and (alpha_converge < 1 - step))):
+            return alpha_converge, poster_converge
+
+        elif nonconverge:
+            if mode == 'dedpul':
+                _, poster_nonconverge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha_nonconverge, **kwargs)
+            elif mode == 'en':
+                _, poster_nonconverge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha_nonconverge, **kwargs)
+
+            if disp:
+                print('didn\'t converge')
+            return alpha_nonconverge, poster_nonconverge
+            # return np.mean(poster_nonconverge), poster_nonconverge
+
+        else:
+            if disp:
+                print('didn\'t converge')
+            return None, None        
+
+
+    @abstractmethod
+    def modified_estimate_poster_cv(df, target, estimator='dedpul', bayes=False, alpha=None, lr=None, estimate_poster_options=None,
+                        estimate_diff_options=None, estimate_preds_cv_options=None, train_nn_options=None, cv=None):
+        """
+        identical to 
+        https://github.com/dimonenka/DEDPUL/blob/04c028101a509b2efe3d55de457b5df92439bb59/algorithms.py#L469
+
+        just corrected module locations since they're being imported from lpu.external_libs.DEDPUL.algorithms
+        or third party libraries with absolute imports. also simplified so the estimator=='dedpul' 
+        and other cases are removed
+
+        Estimates posteriors and priors alpha (if not provided) of N in U; f_u(x) = (1 - alpha) * f_p(x) + alpha * f_n(x)
+        :param df: features, np.array (n_instances, n_features)
+        :param target: binary vector, 0 if positive, 1 if unlabeled, np.array with shape (n,)
+        :param estimator: 'dedpul', 'baseline_dedpul', 'random_dedpul ,'en', 'em_en', or 'nnre';
+            'ntc_methods' for every estimate but 'nnre'
+        :param alpha: share of N in U; is estimated if not provided (nnRE requires it to be provided)
+        :param estimate_poster_options: parameters for estimate_poster... functions
+        :param estimate_diff_options: parameters for estimate_diff
+        :param estimate_preds_cv_options: parameters for estimate_preds_cv
+        :param train_nn_options: parameters for train_NN
+        :return: if estimator != 'ntc_methods':
+            tuple (alpha, poster), e.g. (priors, posteriors) of N in U for the U sample df[target == 1]
+            if estimator == 'ntc_methods':
+            dictionary with such (alpha, poster) tuples as values and method names as keys
+        """
+
+        if isinstance(df, pd.DataFrame):
+            df = df.values
+        if isinstance(target, pd.Series):
+            target = target.values
+
+        training_mode = 'standard'
+
+        if train_nn_options is None:
+            train_nn_options = dict()
+
+        if estimate_poster_options is None:
+            estimate_poster_options = dict()
+
+        if estimate_diff_options is None:
+            estimate_diff_options = dict()
+
+        if estimate_preds_cv_options is None:
+            estimate_preds_cv_options = dict()
+
+        # preds = estimate_preds_cv_catboost(df, target, **estimate_preds_cv_options)
+        ### uncomment the line above and comment the line below for experiments with catboost instead of neural networks
+        preds, discrinimator = DEDPUL.modified_estimate_preds_cv(df=df, cv=cv, target=target, alpha=alpha, training_mode=training_mode, bayes=bayes,
+                                train_nn_options=train_nn_options, lr=lr,  **estimate_preds_cv_options)
+        if bayes:
+            preds, means, variances = preds
+
+        if estimator in {'dedpul', 'baseline_dedpul', 'ntc_methods'}:
+            if bayes:
+                diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff_bayes(means, variances, target, **estimate_diff_options)
+            else:
+                diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds, target, **estimate_diff_options)
+
+        alpha, poster = DEDPUL.modified_estimate_poster_em(diff=diff, mode='dedpul', alpha=alpha, **estimate_poster_options)
+        return alpha, poster, preds
+        
     def __init__(self, config, *args, **kwargs):
         self.config = config
         self.loss_type = config.get('loss_type', None)
@@ -215,112 +376,149 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
         self.dedepul_type = self.config['dedpul_type']
 
 
-    def set_C(self, holdout_dataloader):
-        try:
-            assert (holdout_dataloader.batch_size == len(holdout_dataloader.dataset)), "There should be only one batch in the dataloader."
-        except AssertionError as e:
-            LOG.error(f"There should be only one batch in the dataloader, but {holdout_dataloader.batch_size} is smaller than {len(holdout_dataloader.dataset)}.")
-            raise e
-        X, l, _, _ = next(iter(holdout_dataloader))
-        preds = self.discriminator(X).detach().cpu().numpy().reshape((-1, 1))
-        l = l.reshape((-1, 1))
-        X = X.numpy()
-        X = pd.DataFrame(X)
-        self.threshold = self.config.get('threshold', (preds[l==1].mean()+preds[l==0].mean())/2)
-        diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds, 1-l, bw_mix=self.bw_mix, bw_pos=self.bw_pos, kde_mode=self.kde_mode, threshold=self.threshold,
-                     MT=False, MT_coef=self.MT_coef, tune=False, decay_MT_coef=False, n_gauss_mix=20, n_gauss_pos=10,bins_mix=20, bins_pos=20, k_neighbours=None)
-        self.alpha, _ =  lpu.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, self.dedepul_type, alpha_as_mean_poster=True)
-        self.holdout_l_mean = l.mean()
-        self.C = self.holdout_l_mean * (1-self.alpha)
+    # def set_C(self, holdout_dataloader):
+    #     try:
+    #         assert (holdout_dataloader.batch_size == len(holdout_dataloader.dataset)), "There should be only one batch in the dataloader."
+    #     except AssertionError as e:
+    #         LOG.error(f"There should be only one batch in the dataloader, but {holdout_dataloader.batch_size} is smaller than {len(holdout_dataloader.dataset)}.")
+    #         raise e
+    #     X, l, _, _ = next(iter(holdout_dataloader))
+    #     preds = self.discriminator(X).detach().cpu().numpy().reshape((-1, 1))
+    #     l = l.reshape((-1, 1))
+    #     X = X.numpy()
+    #     X = pd.DataFrame(X)
+    #     self.threshold = self.config.get('threshold', (preds[l==1].mean()+preds[l==0].mean())/2)
+    #     diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds, 1-l, bw_mix=self.bw_mix, bw_pos=self.bw_pos, kde_mode=self.kde_mode, threshold=self.threshold,
+    #                  MT=False, MT_coef=self.MT_coef, tune=False, decay_MT_coef=False, n_gauss_mix=20, n_gauss_pos=10,bins_mix=20, bins_pos=20, k_neighbours=None)
+    #     self.alpha, _ =  lpu.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, self.dedepul_type, alpha_as_mean_poster=True)
+    #     self.holdout_l_mean = l.mean()
+    #     self.C = self.holdout_l_mean * (1-self.alpha)
 
-    def train(self, dataloader, train_nn_options):
-        # try:
-        #     assert (dataloader.batch_size == len(dataloader.dataset)), "There should be only one batch in the dataloader."
-        # except AssertionError as e:
-        #     LOG.error(f"There should be only one batch in the dataloader, but {dataloader.batch_size} is smaller than {len(dataloader.dataset)}.")
-        #     raise e
-        all_X = []
-        all_l = []
-        for X, l, _, _  in dataloader:
-            all_X.append(X)
-            all_l.append(l)
-        all_X = torch.vstack(all_X)
-        all_l = torch.hstack(all_l)
-        all_l = 1 - all_l
-        preds, self.discriminator = DEDPUL.modified_estimate_preds_cv(all_X, all_l, train_nn_options=train_nn_options, lr=self.learning_rate)   
-        return preds
+    def train(self, train_dataloader, val_dataloader, test_dataloader, train_nn_options):
+        all_X_train = []
+        all_l_train = []
+        all_y_train = []
+        for X_train, l_train, y_train, _ in train_dataloader:
+            all_X_train.append(X_train)
+            all_l_train.append(l_train)
+            all_y_train.append(y_train)
+        all_X_train = torch.vstack(all_X_train)
+        all_l_train = torch.hstack(all_l_train)
+        all_y_train = torch.hstack(all_y_train)
+        l_mean = all_l_train.mean().detach().cpu().numpy()
+        # all_l_train = 1 - all_l_train
 
-    def predict_proba(self, X):
-        self.discriminator.eval()
-        return self.discriminator(torch.as_tensor(X, dtype=lpu.constants.DTYPE)).detach().numpy().flatten()
+        all_X_val = []
+        all_l_val = []  
+        all_y_val = []
+        for X_val, l_val, y_val, _ in val_dataloader:
+            all_X_val.append(X_val)
+            all_l_val.append(l_val)
+            all_y_val.append(y_val)
+        all_X_val = torch.vstack(all_X_val)
+        all_l_val = torch.hstack(all_l_val)
+        all_y_val = torch.hstack(all_y_val)
 
-    def predict_prob_y_given_X(self, X):
-        return self.predict_proba(X) / self.C
+        all_X_test = []
+        all_l_test = []
+        all_y_test = []
+        for X_test, l_test, y_test, _ in test_dataloader:
+            all_X_test.append(X_test)
+            all_l_test.append(l_test)
+            all_y_test.append(y_test)
+        all_X_test = torch.vstack(all_X_test)
+        all_l_test = torch.hstack(all_l_test)
+        all_y_test = torch.hstack(all_y_test)
+
+        train_size = len(all_X_train)
+        val_size = len(all_X_val)
+        test_size = len(all_X_test)
+
+
+        concat_X = torch.vstack((all_X_train, all_X_val, all_X_test, all_X_train[all_l_train == 1]))
+        concat_l = torch.hstack((torch.ones(train_size + val_size + test_size), torch.zeros(((all_l_train == 1).sum().to(int)))))
+        
+        
+        alpha_posterior, n_in_unlabeled_posterior, preds = DEDPUL.modified_estimate_poster_cv(concat_X, concat_l, estimator='dedpul', bayes=False, alpha=None, lr=self.config['learning_rate'],
+                                                                                              estimate_diff_options=self.config['estimate_diff_options'],
+                                                                                            train_nn_options=train_nn_options, cv=self.config['cv'])
+        self.C = l_mean * (1 - alpha_posterior)
+
+        y_probs = 1 - n_in_unlabeled_posterior
+        l_probs = y_probs * self.C
+        l_ests = l_probs > self.C * .5
+        y_ests = y_probs > .5 
+        metrics = dict()
+        metrics['train'] = self._calculate_validation_metrics(y_probs[:train_size], all_y_train, l_probs[:train_size], all_l_train, l_ests=l_ests[:train_size], y_ests=y_ests[:train_size])
+        metrics['val'] = self._calculate_validation_metrics(y_probs[train_size:train_size+val_size], all_y_val, l_probs[train_size:train_size+val_size], all_l_val, l_ests=l_ests[train_size:train_size+val_size], y_ests=y_ests[train_size:train_size+val_size])
+        metrics['test'] = self._calculate_validation_metrics(y_probs[train_size+val_size:], all_y_test, l_probs[train_size+val_size:], all_l_test, l_ests=l_ests[train_size+val_size:], y_ests=y_ests[train_size+val_size:])
+
+        return metrics
+
+        
     
-    def predict_prob_l_given_y_X(self, X):
-        return self.C 
 
     def loss_fn(self, X_batch, l_batch):
         return lpu.external_libs.DEDPUL.NN_functions.d_loss_standard(X_batch[l_batch == 1], X_batch[l_batch == 0], self.discriminator, self.loss_type)
     
 
-    def validate(self, dataloader, holdoutloader):
-        y_probs = []
-        l_probs = []
-        y_vals = []
-        l_vals = []
-        y_ests = []
-        l_ests = []
-        losses = []
-        # self.set_C(dataloader)
-        holdout_all_X = []
-        holdout_all_l = []
-        holdout_all_y = []
-        for X_val, l_val, _, _ in holdoutloader:
-            holdout_all_X.append(X_val)
-            holdout_all_l.append(l_val)
-        holdout_all_X = torch.vstack(holdout_all_X)
-        holdout_all_l = torch.hstack(holdout_all_l).detach()
-        holdout_all_X = holdout_all_X[holdout_all_l == 1]
-        holdout_all_l = torch.zeros(((holdout_all_l==1).sum().to(int)))
+    # def validate(self, dataloader, holdoutloader):
+    #     y_probs = []
+    #     l_probs = []
+    #     y_vals = []
+    #     l_vals = []
+    #     y_ests = []
+    #     l_ests = []
+    #     losses = []
+    #     # self.set_C(dataloader)
+    #     holdout_all_X = []
+    #     holdout_all_l = []
+    #     holdout_all_y = []
+    #     for X_val, l_val, _, _ in holdoutloader:
+    #         holdout_all_X.append(X_val)
+    #         holdout_all_l.append(l_val)
+    #     holdout_all_X = torch.vstack(holdout_all_X)
+    #     holdout_all_l = torch.hstack(holdout_all_l).detach()
+    #     holdout_all_X = holdout_all_X[holdout_all_l == 1]
+    #     holdout_all_l = torch.zeros(((holdout_all_l==1).sum().to(int)))
 
-        all_X = []
-        all_l = []
-        all_y = []
-        for X_val, l_val, y_val, idx_val in dataloader:
-            all_X.append(X_val)
-            all_l.append(l_val)
-            all_y.append(y_val)
-        all_X = torch.vstack(all_X)
-        all_y = torch.hstack(all_y).detach().cpu().numpy()
-        all_l = torch.hstack(all_l).detach()
-        all_l = torch.ones_like(all_l)
+    #     all_X = []
+    #     all_l = []
+    #     all_y = []
+    #     for X_val, l_val, y_val, idx_val in dataloader:
+    #         all_X.append(X_val)
+    #         all_l.append(l_val)
+    #         all_y.append(y_val)
+    #     all_X = torch.vstack(all_X)
+    #     all_y = torch.hstack(all_y).detach().cpu().numpy()
+    #     all_l = torch.hstack(all_l).detach()
+    #     all_l = torch.ones_like(all_l)
 
-        all_X = torch.vstack((holdout_all_X, all_X))
-        all_l = torch.hstack((holdout_all_l, all_l))
-        preds = self.discriminator(all_X).detach().cpu().numpy().flatten()
-        diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds=preds, target=all_l, bw_mix=self.bw_mix, bw_pos=self.bw_pos, kde_mode=self.kde_mode, threshold=self.threshold,
-                    MT=False, MT_coef=self.MT_coef, tune=False, decay_MT_coef=False, n_gauss_mix=20, n_gauss_pos=10,bins_mix=20, bins_pos=20, k_neighbours=None)
-        self.alpha, poster =  lpu.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, self.dedepul_type, alpha_as_mean_poster=True)
-        y_probs = poster[len(holdout_all_l):]
-        l_probs = preds[len(holdout_all_l):]
-        l_vals = all_l[len(holdout_all_l):]
-        y_vals = all_y[len(holdout_all_l):]
-        # self.C = self.holdout_l_mean * (1-self.alpha)
-        # y_prob = self.modified_estimate_preds_cv(X_val, 1-l_val, train_nn_options=None)
-        # if hasattr(self, 'loss_fn'):
-        #     losses.append(self.loss_fn(all_X, all_l).item())
-        # else:
-        #     losses.append(0)
+    #     all_X = torch.vstack((holdout_all_X, all_X))
+    #     all_l = torch.hstack((holdout_all_l, all_l))
+    #     preds = self.discriminator(all_X).detach().cpu().numpy().flatten()
+    #     diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds=preds, target=all_l, bw_mix=self.bw_mix, bw_pos=self.bw_pos, kde_mode=self.kde_mode, threshold=self.threshold,
+    #                 MT=False, MT_coef=self.MT_coef, tune=False, decay_MT_coef=False, n_gauss_mix=20, n_gauss_pos=10,bins_mix=20, bins_pos=20, k_neighbours=None)
+    #     self.alpha, poster =  lpu.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, self.dedepul_type, alpha_as_mean_poster=True)
+    #     y_probs = poster[len(holdout_all_l):]
+    #     l_probs = preds[len(holdout_all_l):]
+    #     l_vals = all_l[len(holdout_all_l):]
+    #     y_vals = all_y[len(holdout_all_l):]
+    #     # self.C = self.holdout_l_mean * (1-self.alpha)
+    #     # y_prob = self.modified_estimate_preds_cv(X_val, 1-l_val, train_nn_options=None)
+    #     # if hasattr(self, 'loss_fn'):
+    #     #     losses.append(self.loss_fn(all_X, all_l).item())
+    #     # else:
+    #     #     losses.append(0)
 
-        # y_probs = np.hstack(y_probs)
-        # y_vals = np.hstack(y_vals).astype(int)
-        # l_probs = np.hstack(l_probs)
-        # l_vals = np.hstack(l_vals).astype(int)
-        l_ests = l_probs > self.threshold
-        y_ests = y_probs > .5
+    #     # y_probs = np.hstack(y_probs)
+    #     # y_vals = np.hstack(y_vals).astype(int)
+    #     # l_probs = np.hstack(l_probs)
+    #     # l_vals = np.hstack(l_vals).astype(int)
+    #     l_ests = l_probs > self.threshold
+    #     y_ests = y_probs > .5
 
-        validation_results = self._calculate_validation_metrics(
-            y_probs, y_vals, l_probs, l_vals, l_ests=l_ests, y_ests=y_ests)
-        validation_results.update({'overall_loss': np.mean(losses)})
-        return validation_results
+    #     validation_results = self._calculate_validation_metrics(
+    #         y_probs, y_vals, l_probs, l_vals, l_ests=l_ests, y_ests=y_ests)
+    #     validation_results.update({'overall_loss': np.mean(losses)})
+    #     return validation_results

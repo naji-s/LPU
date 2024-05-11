@@ -22,30 +22,30 @@ import lpu.utils.dataset_utils
 import lpu.models.geometric.GVGP
 
 # Set up logging configuration
-logging.basicConfig(level=logging.INFO)  # Set the logging level as per your requirement
+# logging.basicConfig(level=logging.INFO)  # Set the logging level as per your requirement
 
 # Create a logger instance
 LOG = logging.getLogger(__name__)
 
-INDUCING_POINTS_SIZE = 64
-LEARNINIG_RATE = 0.01
-NUM_EPOCHS = 100
-DEVICE = 'cpu'
-EPOCH_BLOCKS = 1
-TRAIN_VAL_RATIO = None
+# INDUCING_POINTS_SIZE = 64
+# LEARNINIG_RATE = 0.01
+# NUM_EPOCHS = 100
+# DEVICE = 'cpu'
+# EPOCH_BLOCKS = 1
+# TRAIN_VAL_RATIO = None
 
-INTRINSIC_KERNEL_PARAMS = {
-    'normed': False,
-    'kernel_type': 'laplacian',
-    'heat_temp': .01,
-    'noise_factor': 0., 
-    'amplitude': 0.5, 
-    'n_neighbor': 5,
-    'lengthscale':  0.3,
-    'neighbor_mode': 'distance',
-    'power_factor': 1,
-    'invert_M_first': False 
-}
+# INTRINSIC_KERNEL_PARAMS = {
+#     'normed': False,
+#     'kernel_type': 'laplacian',
+#     'heat_temp': .01,
+#     'noise_factor': 0., 
+#     'amplitude': 0.5, 
+#     'n_neighbor': 5,
+#     'lengthscale':  0.3,
+#     'neighbor_mode': 'distance',
+#     'power_factor': 1,
+#     'invert_M_first': False 
+# }
     
  
 
@@ -187,6 +187,9 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
             # torch.where((log_like > 0) & (log_like < lpu.constants.EPSILON), torch.ones_like(log_like, device=log_like.device), log_like)
             # self.probs = torch.exp(log_like)
             # E_D = (1 - l) * torch.logsumexp(torch.stack([torch.tile(-lambda_sample, shape), -self.linear_response, -self.linear_response - lambda_sample, -function_samples, -function_samples - gamma_sample, -function_samples - lambda_sample, -self.linear_response - function_samples, -self.linear_response - function_samples - gamma_sample, -self.linear_response - function_samples - lambda_sample], dim=1), dim=1)
+
+
+            ### OLDER METHOD OF CLAC
             shape = L_t.shape
             ZERO = torch.zeros(L_t.shape)
             GAMMA = torch.tile(gamma_sample, shape)
@@ -194,12 +197,31 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
             L_s = L_s.unsqueeze(0).expand(shape[0], -1)
 
             # A = L_t#torch.stack([L_t, ZERO], dim=1)
-            B = torch.logsumexp(torch.stack([GAMMA, gamma_sample + L_s, L_s], dim=1), dim=1)
-            C = torch.logsumexp(torch.stack([ZERO, GAMMA, LAMBDA, L_t, lambda_sample+L_t, L_s, L_s + gamma_sample, L_s+lambda_sample, lambda_sample + L_t + L_s], dim=1), dim=1)
-            total = L_t + B - C 
-    
+            # B = torch.logsumexp(torch.stack([GAMMA, gamma_sample + L_s, L_s], dim=1), dim=1)
+            # C = torch.logsumexp(torch.stack([ZERO, GAMMA, LAMBDA, L_t, lambda_sample + L_t, L_s, L_s + gamma_sample, L_s+lambda_sample, lambda_sample + L_t + L_s], dim=1), dim=1)
+            # # breakpoint()
+            # D = torch.logsumexp(torch.stack([torch.tile(-lambda_sample, shape), 
+            #                                  -L_s, 
+            #                                  -L_s - lambda_sample, 
+            #                                  -function_samples, 
+            #                                  -function_samples - gamma_sample, 
+            #                                  -function_samples - lambda_sample, 
+            #                                  -self.linear_response - function_samples, 
+            #                                  -self.linear_response - function_samples - gamma_sample, 
+            #                                  -self.linear_response - function_samples - lambda_sample], dim=1), dim=1)
+            # total = L_t + B - C - D
+            # return torch.distributions.Bernoulli(logits=total)
+            # breakpoint()
+            logit = - torch.logsumexp(torch.stack([ZERO, -L_t], dim=1), dim=1) \
+                    + torch.logsumexp(torch.stack([GAMMA, GAMMA - L_s, ZERO], dim=1), dim=1) \
+                    - torch.logsumexp(torch.stack([GAMMA, + LAMBDA, ZERO], dim=1), dim=1) - torch.logsumexp(torch.stack([ZERO, -L_s], dim=1), dim=1) \
+            - torch.logsumexp(torch.stack([GAMMA - L_t, GAMMA - L_t - L_s, LAMBDA, LAMBDA - L_t, LAMBDA - L_s, LAMBDA - L_t - L_s,-L_t, -L_s, -L_t - L_s], dim=1), dim=1)\
+            + torch.logsumexp(torch.stack([GAMMA, GAMMA - L_s, GAMMA - L_t, GAMMA - L_s - L_t, 
+                                                      LAMBDA, LAMBDA - L_s, LAMBDA - L_t, LAMBDA - L_t - L_s, ZERO, -L_t, -L_s, -L_t - L_s], dim=1), dim=1)
+
+            return torch.distributions.Bernoulli(logits=logit)
             # total = torch.clamp(total, max=0.)
-            return torch.distributions.Bernoulli(logits=total)
+            # return torch.distributions.Bernoulli(probs=torch.exp(total))
             # return torch.distributions.Bernoulli(probs=other_probs)
 
             # return torch.distributions.Bernoulli(probs=self.probs)
@@ -259,7 +281,7 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
         """
         Extract intrinsic kernel parameters from `config` and return them as a dictionary
         """
-        return self.config.get('intrinsic_kernel_params', INTRINSIC_KERNEL_PARAMS)
+        return self.config.get('intrinsic_kernel_params', None)#INTRINSIC_KERNEL_PARAMS)
 
     
     # def _initialize_likelihood(self, inducing_points):
@@ -308,4 +330,6 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
         with torch.no_grad():
             y_prob = torch.nn.functional.sigmoid(self.gp_model(X).rsample(sample_shape=torch.Size([100]))).mean(axis=0).cpu().detach().numpy()
         return y_prob
+    
+
     

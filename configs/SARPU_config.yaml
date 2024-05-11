@@ -1,0 +1,41 @@
+# for VGP:
+inducing_points_size: 32
+
+learning_rate: 0.001
+num_epochs: 200
+device: cpu
+epoch_block: 1
+max_iter: 5
+
+
+intrinsic_kernel_params: 
+    normed: false
+    kernel_type: laplacian
+    heat_temp: .01
+    noise_factor: .0
+    amplitude: 0.5
+    n_neighbor: 5
+    lengthscale: .3
+    neighbor_mode: distance
+    power_factor: 1
+    invert_M_first: false 
+    normalize: false
+
+dataset_name:  animal_no_animal #fashionMNIST
+dataset_kind: LPU
+data_generating_process: SB #SB # either of CC (case-control) or (SB) (selection-bias)
+ratios: 
+  # *** NOTE ***
+  # TRAIN_RATIO : :  1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+  # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio :  1
+  test: 0.05
+  val: 0.4
+  holdout: 0.05
+  train: .5
+
+batch_size: 
+  train: null
+  test: null
+  val: null
+  holdout: null
+

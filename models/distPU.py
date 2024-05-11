@@ -1,10 +1,7 @@
 import logging
-
 import numpy as np
 import torch.nn
 import torchvision.models
-
-
 import lpu.external_libs
 import lpu.external_libs.distPU.customized
 import lpu.external_libs.distPU.customized.mixup
@@ -36,22 +33,17 @@ def get_predicted_scores(data_loader, model, device):
     model.eval()
     predicted_scores = []
     indexes = []
-
     with torch.no_grad():
         for epoch, (X, l, _, index) in enumerate(data_loader):
             X = X.to(device)
             l = l.to(device)
             outputs = model(X).squeeze()
-
             outputs = torch.sigmoid(outputs)
-
             predicted_scores.append(outputs)
             indexes.append(index.squeeze())
-    
     predicted_scores = torch.cat(predicted_scores)
     indexes = torch.cat(indexes)
-
-    return indexes, predicted_scores   
+    return indexes, predicted_scores
 
 CLASS_PRIOR = {
     'cifar-10': 0.4,
@@ -63,7 +55,6 @@ def create_loss(args, prior=None):
     if prior is None:
         prior = CLASS_PRIOR[args.dataset]
     print('prior: {}'.format(prior))
-    
     if args.loss == 'Dist-PU':
         base_loss = lpu.external_libs.distPU.losses.distributionLoss.LabelDistributionLoss(prior=prior, device=args.device)
     else:
@@ -72,12 +63,10 @@ def create_loss(args, prior=None):
     def loss_fn_entropy(outputs, labels):
         scores = torch.sigmoid(torch.clamp(outputs, min=-10, max=10))
         return base_loss(outputs, labels) + args.co_mu * lpu.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores[labels!=1])
-    
+
     if args.entropy == 1:
         return loss_fn_entropy
-    
     return base_loss
-
 
 def create_model(dataset, dim):
     if dataset.startswith('cifar'):
@@ -98,14 +87,12 @@ class distPU(lpu.models.lpu_model_base.LPUModelBase):
         self.device = config.get('device')
         self.dim = dim
         # initializing the model
-        # if config['dataset_kind'] == 'LPU':
-        #     breakpoint()
-        #     self.model = lpu.utils.auxiliary_models.MultiLayerPerceptron(dim).to(self.device).to(lpu.constants.DTYPE)
-        # else:
-        self.model = lpu.models.distPU.create_model('fmnist', dim=dim).to(self.device).to(lpu.constants.DTYPE)
+        if config['dataset_kind'] == 'LPU':
+            self.model = lpu.utils.auxiliary_models.MultiLayerPerceptron(input_dim=dim, output_dim=1).to(self.device).to(lpu.constants.DTYPE)
+        else:
+            self.model = lpu.models.distPU.create_model('fmnist', dim=dim).to(self.device).to(lpu.constants.DTYPE)
 
-
-    def train_one_epoch(self, epoch, dataloader, loss_fn, optimizer, scheduler): 
+    def train_one_epoch(self, epoch, dataloader, loss_fn, optimizer, scheduler):
         self.model.train()
         loss_total = 0
         for _, (X, l, _, _) in enumerate(dataloader):
@@ -113,17 +100,16 @@ class distPU(lpu.models.lpu_model_base.LPUModelBase):
             l = l.to(self.device)
             optimizer.zero_grad()
             outputs = self.model(X).squeeze()
+            # in case softmax is the last layer instead of sigmoid
+            if outputs.dim() == 2:
+                outputs = outputs[:, 1]
             loss = loss_fn(outputs, l.float())
-
             loss.backward()
             optimizer.step()
-
             loss_total = loss_total + loss.item()
-        
         scheduler.step()
-        return loss_total / len(dataloader)
+        return {'loss': loss_total / len(dataloader)}
 
-    
     def train_mixup_one_epoch(self, epoch, dataloader, loss_fn, optimizer, scheduler, mixup_dataset, co_entropy):
         self.model.train()
         loss_total = 0
@@ -132,32 +118,28 @@ class distPU(lpu.models.lpu_model_base.LPUModelBase):
             l = l.to(self.device)
             psudos = mixup_dataset.psudo_labels[index].to(self.device)
             psudos[l==1] = 1
-
             mixed_x, y_a, y_b, lam = lpu.external_libs.distPU.customized.mixup.mixup_two_targets(X, psudos, self.config['alpha'], self.device)
             outputs = self.model(mixed_x).squeeze()
             outputs = torch.clamp(outputs, min=-10, max=10)
             scores = torch.sigmoid(outputs)
-
-            outputs_ = torch.clamp(self.model(X).squeeze(), min=-10, max=10)
+            outputs_ = torch.clamp(self.model(X).squeeze(), min=-10, max=10).squeeze()
+            if outputs_.dim() == 2:
+                outputs_ = outputs_[:, 1]
             scores_ = torch.sigmoid(outputs_)
-
-            loss = ( loss_fn(outputs_, l.float())
-                + co_entropy*lpu.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores_[l!=1]) 
-                + self.config['co_mix_entropy']*lpu.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores)
-                + self.config['co_mixup'] * lpu.external_libs.distPU.customized.mixup.mixup_bce(scores, y_a, y_b, lam))
-
+            loss = (
+                loss_fn(outputs_, l.float()) +
+                co_entropy*lpu.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores_[l!=1]) +
+                self.config['co_mix_entropy']*lpu.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores) +
+                self.config['co_mixup'] * lpu.external_libs.distPU.customized.mixup.mixup_bce(scores, y_a, y_b, lam)
+            )
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
             with torch.no_grad():
                 mixup_dataset.psudo_labels[index] = scores_.detach()
-
             loss_total = loss_total + loss.item()
-
         scheduler.step()
-        return loss_total / len(dataloader)
-
+        return {'loss': loss_total / len(dataloader)}
 
     def predict_prob_y_given_X(self, X):
         self.model.eval()
@@ -165,16 +147,16 @@ class distPU(lpu.models.lpu_model_base.LPUModelBase):
             if type(X) == np.ndarray:
                 X = torch.tensor(X, dtype=lpu.constants.DTYPE)
             X = X.to(self.device)
-            outputs = self.model(X)
-            predicted_prob  = torch.nn.functional.sigmoid(outputs)
+            outputs = self.model(X).squeeze()
+            if outputs.dim() == 2:
+                outputs = outputs[:, 1]
+            predicted_prob = torch.nn.functional.sigmoid(outputs)
         return predicted_prob.cpu().numpy().squeeze()
-    
-            
+
     def predict_prob_l_given_y_X(self, X):
         return self.C
-        
+
     def set_C(self, holdout_dataloader):
         X, l, y, _ = next(iter(holdout_dataloader))
         self.C = l[y == 1].mean().detach().cpu().numpy()
         self.prior = y.mean().detach().cpu().numpy()
-

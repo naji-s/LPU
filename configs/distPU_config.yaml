@@ -1,5 +1,5 @@
 device: cpu
-dataset: null #fmnist
+dataset: animal-no-animal #fmnist
 datapath: null #data/FMNIST_data
 num_labeled: null #10000
 num_workers: 1
@@ -17,7 +17,7 @@ alpha: 6.0
 co_mix_entropy: 0.04
 co_mixup: 5.0
 warm_up_epochs: 100
-pu_epochs: 500
+pu_epochs: 100
 random_seed: 0
 ratios: 
   # *** NOTE ***

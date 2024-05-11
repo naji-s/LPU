@@ -21,7 +21,7 @@ batch_size: 64
 momentum: 0.9
 weight_decay: 0.005
 log_path: logs/
-modeldir: /Users/naji/phd_codebase/lpu/external_libs/Self_PU/checkpoints
+modeldir: lpu/external_libs/Self_PU/checkpoints
 task_name: temp
 epochs: 200
 num_workers: 0

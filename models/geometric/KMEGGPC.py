@@ -2,7 +2,7 @@ import logging
 
 import numpy as np
 
-import km.Kernel_MPE_grad_threshold
+import lpu.external_libs.SAR_PU.lib.km.km.Kernel_MPE_grad_threshold
 import lpu.models.geometric.elkanGGPC
 
 LOG = logging.getLogger(__name__)
@@ -23,12 +23,12 @@ class KMEModelGGPC(lpu.models.geometric.elkanGGPC.ElkanGGPC):
     def set_C(self, holdout_dataloader):        
         X_holdout = []
         l_holdout = []
-        for X_holdout_batch, l_holdout_batch, _ in holdout_dataloader:
+        for X_holdout_batch, l_holdout_batch, _, _ in holdout_dataloader:
             X_holdout.append(X_holdout_batch)
             l_holdout.append(l_holdout_batch)
         X_holdout = np.vstack(X_holdout)
         l_holdout = np.hstack(l_holdout)
-        kappa_2, kappa_1 = km.Kernel_MPE_grad_threshold.wrapper(X_holdout, X_holdout[l_holdout==1])
+        kappa_2, kappa_1 = lpu.external_libs.SAR_PU.lib.km.km.Kernel_MPE_grad_threshold.wrapper(X_holdout, X_holdout[l_holdout==1])
         if self.kernel_mode == 1:
             self.C = l_holdout.mean() / kappa_1
         else:

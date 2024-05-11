@@ -1,3 +1,4 @@
+import abc
 import logging
 
 import gpytorch
@@ -5,6 +6,7 @@ import numpy as np
 import sklearn.base
 import sklearn.metrics
 import torch
+import abc
 
 
 import lpu.constants
@@ -31,6 +33,20 @@ LOG = logging.getLogger(__name__)
 
 
 class GeometricGPLPUBase(lpu.models.lpu_model_base.LPUModelBase):
+
+    class CustomLikelihood(gpytorch.likelihoods.Likelihood, metaclass=abc.ABCMeta):
+        def __init__(self, config, **kwargs):
+            super().__init__()
+            # Rest of the code...
+
+        @abc.abstractmethod
+        def forward(self, function_samples, **kwargs):
+            raise NotImplementedError("forward method must be implemented in the subclass")
+
+        @abc.abstractmethod
+        def update_input_data(self, X):
+            raise NotImplementedError("update_input_data method must be implemented in the subclass")
+        
     def __init__(self, config, inducing_points_initial_vals=None, *args, **kwargs):
         super().__init__()
         self.config = config
@@ -88,13 +104,13 @@ class GeometricGPLPUBase(lpu.models.lpu_model_base.LPUModelBase):
         loss = -self.mll(output, l_batch)
         return loss
 
-    def train_one_epoch(self, dataloader, optimizer):
+    def train_one_epoch(self, dataloader, optimizer, holdout_dataloader=None):
         self.gp_model.train()
         self.likelihood.train()
-        mini_batch_counter = 0
         total_loss = 0.
-        for batch_idx, (X_batch, l_batch, _) in enumerate(
-                dataloader):
+        num_of_batches = 0
+        scores_dict = {}
+        for batch_idx, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
             X_batch.to(self.device)
             l_batch.to(self.device)
             LOG.debug(f"Batch {batch_idx} is being processed now")
@@ -103,9 +119,18 @@ class GeometricGPLPUBase(lpu.models.lpu_model_base.LPUModelBase):
             total_loss += loss
             loss.backward()
             optimizer.step()
-
-            mini_batch_counter += 1
+            num_of_batches += 1
+            if holdout_dataloader is not None:
+                self.set_C(holdout_dataloader)
+            batch_scores = self.calculate_probs_and_scores(X_batch, l_batch, y_batch)
+            for score_type, score_value in batch_scores.items():
+                if score_type not in scores_dict:
+                    scores_dict[score_type] = []
+                scores_dict[score_type].append(score_value)
         self.gp_model.eval()
         self.likelihood.eval()
-        total_loss = total_loss.item()
-        return total_loss
+        total_loss = total_loss.item() / num_of_batches
+        for score_type in scores_dict:
+            scores_dict[score_type] = np.mean(scores_dict[score_type])
+        scores_dict['overall_loss'] = total_loss
+        return scores_dict

@@ -50,6 +50,7 @@ class uPUloss(torch.nn.Module):
             1., unlabeled.sum().item())
         y_positive = self.loss_func(x)
         y_unlabeled = self.loss_func(-x)
+# ?        breakpoint()
         positive_risk = torch.sum(
             self.prior * positive / n_positive * y_positive)
         negative_risk = torch.sum(
@@ -78,7 +79,7 @@ class uPU(lpu.models.lpu_model_base.LPUModelBase):
     
     def set_C(self, holdout_dataloader):
         assert len(holdout_dataloader) == 1
-        _, holdout_l, holdout_y = next(iter(holdout_dataloader))
+        _, holdout_l, holdout_y, _ = next(iter(holdout_dataloader))
         self.C = holdout_l[holdout_y == 1.].mean().detach().cpu().numpy()
         is_positive = holdout_y==1
         self.prior = is_positive.mean() if type(is_positive) == 'numpy.ndarray' else  is_positive.detach().cpu().numpy().mean()
@@ -88,16 +89,38 @@ class uPU(lpu.models.lpu_model_base.LPUModelBase):
 
     def train_one_epoch(self, dataloader, loss_func=None, optimizer=None, device=None):
         self.model.train()
-        for i, (X_batch, l_batch, _) in enumerate(dataloader):
+        scores_dict = {}
+        for i, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
             X_batch = X_batch.to(device, non_blocking=True)
             l_batch = l_batch.to(device, non_blocking=True)
+            y_batch = y_batch.to(device, non_blocking=True)
+            # breakpoint()
+            if self.config['data_generating_process'] == 'CC':
+                X_batch_concat = torch.concat([X_batch, X_batch[l_batch==1]], dim=0)
+                l_batch_concat = torch.concat([torch.zeros_like(l_batch), torch.ones((int(l_batch.sum().detach().cpu().numpy().squeeze())))], dim=0)
+                y_batch_concat = torch.concat([y_batch, y_batch[l_batch==1]], dim=0)
+            else:
+                X_batch_concat = X_batch
+                l_batch_concat = l_batch
+                y_batch_concat = y_batch
 
             optimizer.zero_grad()            
-            output = self.model(X_batch)             
-            loss = loss_func(output, l_batch * 2 - 1)  
+            output = self.model(X_batch_concat)             
+            loss = loss_func(output, l_batch_concat * 2 - 1)  
             loss.backward()
             optimizer.step()
+
+            batch_scores = self.calculate_probs_and_scores(X_batch_concat, l_batch_concat, y_batch_concat)
+            for score_type, score_value in batch_scores.items():
+                if score_type not in scores_dict:
+                    scores_dict[score_type] = []
+                scores_dict[score_type].append(score_value)
+
         self.model.eval()
+        for score_type in scores_dict:
+            scores_dict[score_type] = np.mean(scores_dict[score_type])
+
+        return scores_dict
 
     def predict_prob_y_given_X(self, X):
         self.model.eval()

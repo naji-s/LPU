@@ -7,9 +7,8 @@ net_type: LeNet
 sigmoid_loss: true
 estimate_alpha: true
 warm_start: true
-warm_start_epochs: 50
-epochs: 500
-seed: 42
+warm_start_epochs: 100
+epochs: 100
 alpha: 0.5
 beta: 0.5
 log_dir: logging_accuracy
@@ -24,8 +23,8 @@ ratios:
   # *** NOTE ***
   # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
   # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-  test: 0.35 
-  val: 0.1 
+  test: 0.25 
+  val: 0.2
   holdout: .05 
   train: .5 
 batch_size: 
@@ -33,3 +32,5 @@ batch_size:
   test: 64
   val: 64
   holdout: 64
+data_generating_process: SB #SB # either of CC (case-control) or (SB) (selection-bias)
+

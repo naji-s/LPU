@@ -15,7 +15,7 @@ import pickle
 from lpu.extras.pytorch_hmax import hmax  # Ensure hmax is installed and accessible
 import lpu.constants as constants
 LOG = logging.getLogger(__name__)
-LOG.setLevel(logging.DEBUG)
+# LOG.setLevel(logging.DEBUG)
 
 # Define a custom dataset to load subject images
 class SubjectDataset(Dataset):

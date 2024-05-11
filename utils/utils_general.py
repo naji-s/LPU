@@ -1,8 +1,11 @@
-import lpu.constants
-import numpy as np
+import logging
 import random
+
+import numpy as np
 import torch
 import yaml  # Import the yaml module to work with YAML files.
+
+import lpu.constants
 
 def load_and_process_config(yaml_file_path):
     """
@@ -51,3 +54,13 @@ def set_seed(seed):
     random.seed(seed)  # For Python's `random` module
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+def configure_logger(module_name):
+    logger = logging.getLogger(module_name)
+    logger.setLevel(logging.INFO)
+    # formatter = logging.Formatter('[[ LOGGING %(asctime)s - %(name)s - %(levelname)s ]]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    formatter = logging.Formatter('[[[ --- LOGGING --- %(asctime)s - %(pathname)s.%(name)s - %(levelname)s ]]]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+    return logger

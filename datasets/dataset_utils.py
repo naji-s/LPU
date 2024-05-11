@@ -76,10 +76,10 @@ def index_group_split(index_arr=None, ratios_dict=None, random_state=None, strat
         past_ratio = past_ratio - ratio        
     return indices_dict
 
-def make_data_loader(dataset, batch_size, sampler=None):
+def make_data_loader(dataset, batch_size, sampler=None, drop_last=False):
     if batch_size is None:
         batch_size = len(dataset)
-    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size)
+    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, drop_last=drop_last, pin_memory=True, num_workers=1, persistent_workers=True)
     return sampler, dataloader
 
 
@@ -87,7 +87,7 @@ def initialize_inducing_points(dataloader, inducing_points_size):
     # Assuming INDUCING_POINTS_SIZE is defined as an attribute or constant
     # This method selects a subset of the training data to be used as inducing points
     inducing_points = []
-    for X_batch, _, _ in dataloader:
+    for X_batch, _, _, _ in dataloader:
         inducing_points.append(X_batch)
         if len(inducing_points) >= inducing_points_size:
             break
@@ -131,15 +131,17 @@ class StratifiedSampler(torch.utils.data.Sampler):
 
 
             
-def LPUD_to_MPED(lpu_dataset, indices, double_unlabeled=False):
+def LPUD_to_MPED(lpu_dataset, indices, data_generating_process='CC'):
     import lpu.external_libs.PU_learning.helper
-    if double_unlabeled:
+    if data_generating_process == 'CC':
         # use all unlabeled data, which means we are using labeled data by removing the labels, to 
         # make the case-control assumption hold
         unlabeled_indices = indices
-    else:
+    elif data_generating_process == 'SB':
         # use only data where l=0, which under selection bias assumption is the same as l=0
         unlabeled_indices = indices[lpu_dataset.l[indices]==0]
+    else:
+        raise ValueError('data_generating_process must be one of "CC" or "SB"')
         
 
     p_indices = indices[lpu_dataset.l[indices]==1]

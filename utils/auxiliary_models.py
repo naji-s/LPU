@@ -1,12 +1,11 @@
 import torch.nn
 
 class MultiLayerPerceptron(torch.nn.Module):
-    def __init__(self, dim):
+    def __init__(self, input_dim, output_dim=2):
         super(MultiLayerPerceptron, self).__init__()
 
-        self.input_dim = dim
-
-        self.l1 = torch.nn.Linear(dim, 300, bias=False)
+        self.input_dim = input_dim
+        self.l1 = torch.nn.Linear(self.input_dim, 300, bias=False)
         self.b1 = torch.nn.BatchNorm1d(300)
         self.l2 = torch.nn.Linear(300, 300, bias=False)
         self.b2 = torch.nn.BatchNorm1d(300)
@@ -14,7 +13,7 @@ class MultiLayerPerceptron(torch.nn.Module):
         self.b3 = torch.nn.BatchNorm1d(300)
         self.l4 = torch.nn.Linear(300, 300, bias=False)
         self.b4 = torch.nn.BatchNorm1d(300)
-        self.l5 = torch.nn.Linear(300, 2)
+        self.l5 = torch.nn.Linear(300, output_dim)
         self.af = torch.nn.functional.relu
     def forward(self, x):
         x = x.view(-1, self.input_dim)

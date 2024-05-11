@@ -8,6 +8,8 @@ import lpu.models.lpu_model_base
 import lpu.external_libs.PU_learning.estimator
 import lpu.external_libs.PU_learning.train_PU
 import lpu.constants
+import lpu.utils
+import lpu.utils.auxiliary_models
 
     
 class MPE(lpu.models.lpu_model_base.LPUModelBase):
@@ -24,7 +26,7 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
         else:
             self.alpha_estimate = config['alpha_estimate']
     def initialize_model(self, dim):
-        self.net = MultiLayerPerceptron(dim=dim).to(self.device).to(lpu.constants.DTYPE)
+        self.net = lpu.utils.auxiliary_models.MultiLayerPerceptron(input_dim=dim, output_dim=2).to(self.device).to(lpu.constants.DTYPE)
         if self.config['device'].startswith('cuda'):
             self.net = torch.nn.DataParallel(self.net)
             torch.cudnn.benchmark = True
@@ -159,7 +161,6 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
         mpe_estimate, _, _ = self.BBE_estimator(p_probs, unlabeled_probs, unlabeled_targets)
         return mpe_estimate
     
-
     def warm_up_one_epoch(self, epoch, p_trainloader, u_trainloader, optimizer, criterion, valid_loader):
         if self.show_bar:     
             print('\nTrain Epoch: %d' % epoch)
@@ -168,24 +169,52 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
         correct = 0
         total_size = 0
         total_loss = 0
-
+        scores_dict = {}
+        all_ls = []
+        all_ys = []
+        all_inputs = []
+        all_y_outputs = []
+        all_l_outputs = []
+        self.set_C(l_mean=.5)
         for batch_idx, ( p_data, u_data ) in enumerate(zip(p_trainloader, u_trainloader)):
             optimizer.zero_grad()
             _, p_inputs, p_targets = p_data
             _, u_inputs, u_targets, u_true_targets = u_data
-
-
             
             p_targets = p_targets.to(self.device)
             u_targets = u_targets.to(self.device)
+
 
         
             inputs =  torch.cat((p_inputs, u_inputs), dim=0)
             targets =  torch.cat((p_targets, u_targets), dim=0)
             inputs = inputs.to(self.device)
 
+
             outputs = self.net(inputs)
 
+            if self.config['data_generating_process'] == 'SB':
+                y_batch = u_true_targets
+                l_batch = torch.ones_like(u_targets)
+                inputs_batch = u_inputs
+                outputs_batch = outputs[len(p_targets):]
+            else:
+                y_batch = u_targets
+                l_batch = torch.ones_like(u_targets)
+                inputs_batch = u_inputs
+                outputs_batch = outputs[len(p_targets):]
+
+            if len(all_ls) == 0:
+                all_ls = l_batch
+                all_ys = y_batch
+                all_inputs = inputs_batch
+                all_y_outputs = outputs_batch
+            else:
+                all_ls = torch.concat((all_ls, l_batch), dim=0)
+                all_ys = torch.concat((all_ys, y_batch), dim=0)
+                all_inputs = torch.concat((all_inputs, inputs_batch), dim=0)
+                all_y_outputs = torch.concat((all_y_outputs, outputs_batch), dim=0)
+                
             p_outputs = outputs[:len(p_targets)]
             u_outputs = outputs[len(p_targets):]
             
@@ -206,7 +235,18 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
             if self.show_bar: 
                 lpu.external_libs.PU_learning.utils.progress_bar(batch_idx, len(p_trainloader) + len(u_trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                     % (total_loss/(batch_idx+1), 100.*correct/total_size, correct, total_size))
-        return 100.*correct/total_size
+        all_y_outputs = torch.nn.functional.softmax(all_y_outputs, dim=-1)[:,1].detach().cpu().numpy().squeeze()
+        # all_l_outputs = 1 - all_y_outputs
+        all_l_outputs = all_y_outputs * self.C
+        all_l_ests = all_l_outputs > 0.5 * self.C
+        all_y_ests = all_y_outputs > 0.5
+        all_scores = self._calculate_validation_metrics(y_probs=all_y_outputs, y_vals=all_ys, l_probs=all_l_outputs, l_vals=all_ls, l_ests=all_l_ests, y_ests=all_y_ests)
+        all_scores['total_loss'] = total_loss / (batch_idx + 1)
+        return all_scores
+            # else:
+            #     scores_dict = {'loss': total_loss / (batch_idx + 1), 'accuracy': 100. * correct / total_size}
+            # return scores_dict       
+     # return 100.*correct/total_size
     
     def rank_inputs(self, epoch, u_trainloader, u_size):
 
@@ -238,9 +278,9 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
     def train_one_epoch(self, epoch, p_trainloader, u_trainloader, optimizer, criterion, train_unlabeled_size, update_gradient=True): 
         keep_samples, _ = self.rank_inputs(epoch, u_trainloader, u_size=train_unlabeled_size)
         
-        p_targets = torch.hstack([p_target for (_, _, p_target)  in copy.deepcopy(p_trainloader)])
-        u_p_targets = torch.hstack([u_target for (_, _, _, u_target)  in copy.deepcopy(u_trainloader)])
-        print ("positive ratio in training:", (torch.sum((p_targets==0)) + torch.sum(u_p_targets==0)) / (len(p_targets) + len(u_p_targets)))
+        # p_targets = torch.hstack([p_target for (_, _, p_target)  in copy.deepcopy(p_trainloader)])
+        # u_p_targets = torch.hstack([u_target for (_, _, _, u_target)  in copy.deepcopy(u_trainloader)])
+        # print ("positive ratio in training:", (torch.sum((p_targets==0)) + torch.sum(u_p_targets==0)) / (len(p_targets) + len(u_p_targets)))
         # breakpoint()
         if self.show_bar:
             print('\nTrain Epoch: %d' % epoch)
@@ -251,7 +291,16 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
         total_p_loss = 0
         total_u_loss = 0
         total_size = 0
+        scores_dict = {}
+        all_ls = []
+        all_ys = []
+        all_inputs = []
+        all_y_outputs = []
+        all_l_outputs = []
+        self.set_C(l_mean=.5)
+
         for batch_idx, ( p_data, u_data ) in enumerate(zip(p_trainloader, u_trainloader)):
+
             if update_gradient:
                 optimizer.zero_grad()
             
@@ -263,24 +312,42 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
             if len(u_idx) <1: 
                 continue
 
-            u_targets = u_targets[u_idx]
+            inputs =  torch.cat((p_inputs, u_inputs), dim=0)
+            inputs = inputs.to(self.device)
+            outputs = self.net(inputs)
+
+            y_concat = u_true_targets
+            l_concat = torch.ones_like(u_targets)
+            inputs_concat = u_inputs
+            outputs_concat = outputs[len(p_targets):]
+            
+
+            if len(all_ls) == 0:
+                all_ls = l_concat
+                all_ys = y_concat
+                all_inputs = inputs_concat
+                all_y_outputs = outputs_concat
+            else:
+                all_ls = torch.concat((all_ls, l_concat), dim=0)
+                all_ys = torch.concat((all_ys, y_concat), dim=0)
+                all_inputs = torch.concat((all_inputs, inputs_concat), dim=0)
+                all_y_outputs = torch.concat((all_y_outputs, outputs_concat), dim=0)
+
 
             p_targets = p_targets.to(self.device)
             u_targets = u_targets.to(self.device)
-            
-
-            u_inputs = u_inputs[u_idx]        
-            inputs =  torch.cat((p_inputs, u_inputs), dim=0)
             targets =  torch.cat((p_targets, u_targets), dim=0)
-            inputs = inputs.to(self.device)
 
-            outputs = self.net(inputs)
+
 
             p_outputs = outputs[:len(p_targets)]
             u_outputs = outputs[len(p_targets):]
             
+            u_targets_subset = u_targets[u_idx]
+            u_outputs_subset = u_outputs[u_idx]
+
             p_loss = criterion(p_outputs, p_targets)
-            u_loss = criterion(u_outputs, u_targets)
+            u_loss = criterion(u_outputs_subset, u_targets_subset)
 
             loss = (p_loss + u_loss)/2.0
             total_p_loss += p_loss.item() / 2.
@@ -301,11 +368,21 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
             if self.show_bar:
                 lpu.external_libs.PU_learning.utils.progress_bar(batch_idx, len(p_trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                     % (train_loss/(batch_idx+1), 100.*correct/total_size, correct, total_size))
+                
         total_loss /= len(p_trainloader)                
         total_p_loss /= len(p_trainloader)
         total_u_loss /= len(u_trainloader)
-        loss_dict = {'total_loss': total_loss, 'p_loss': total_p_loss, 'u_loss': total_u_loss}
-        return 100.*correct/total_size, loss_dict
+        all_y_outputs = torch.nn.functional.softmax(all_y_outputs, dim=-1)[:,1].detach().cpu().numpy().squeeze()
+        all_l_outputs = all_y_outputs * self.C
+        all_l_ests = all_l_outputs > 0.5 * self.C
+        all_y_ests = all_y_outputs > 0.5
+        all_scores = self._calculate_validation_metrics(y_probs=all_y_outputs, y_vals=all_ys, l_probs=all_l_outputs, l_vals=all_ls, l_ests=all_l_ests, y_ests=all_y_ests)
+        all_scores['total_loss'] = total_loss
+        all_scores['p_loss'] = total_p_loss
+        all_scores['u_loss'] = total_u_loss
+        return all_scores
+
+        # return 100.*correct/total_size, loss_dict
 
     def validate(self, epoch, p_validloader, u_validloader, criterion, threshold, separate=False, logistic=True):
         
@@ -330,17 +407,12 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
         l_ests = []
         losses = []
 
-        # if not logistic: 
-            # print("here")
-            # criterion = sigmoid_loss
-        # print ("The balance for validation:", np.mean([true_targets==0 for _, inputs, _, true_targets in copy.deepcopy(u_validloader)]))
         with torch.no_grad():
-            for batch_idx, ((_, X_p, y_p), (_, X_u, _, y_u)) in enumerate(zip(p_validloader, u_validloader)):
+            for batch_idx,(_, X_u, _, y_u) in enumerate(u_validloader):
                 # print ("positive ratio in validate:", (torch.sum((y_p==0)) + torch.sum(y_u==0)) / (len(y_p) + len(y_u)))
-                # X = X_u
-                # y = y_u
-                X = torch.concat((X_p, X_u), dim=0)
-                y = torch.concat((y_p, y_u), dim=0)
+                X = X_u
+                y = y_u
+
                 X , y = X.to(self.device), y.to(self.device)
                 outputs = self.net(X)
                 outputs_probs = torch.nn.functional.softmax(outputs, dim=-1)[:,0]
@@ -381,7 +453,7 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
                 outputs_probs = 1 - outputs_probs.detach().cpu().numpy()
                 l_probs = self.predict_proba(X)
                 l_probs = l_probs
-                l_ests = self.predict(X)
+                l_ests = self.predict(X, threshold=0.5 * self.C)
                 l_vals = np.zeros_like(y)
                 y_vals.append(y)
                 y_ests.append(predicted)
@@ -398,10 +470,22 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
 
         validation_results = self._calculate_validation_metrics(
             y_probs, y_vals, l_probs, l_vals, l_ests=l_ests, y_ests=y_ests)
+        validation_results['total_loss'] = total_loss/(batch_idx+1)
         # validation_results.update({'overall_loss': np.mean(losses)})
         # losses = losses[-1]
-        validation_results['L_mpe'] = np.mean(losses)
+        # validation_results['total_loss'] = np.mean(losses)
         return validation_results
+
+    # def calculate_probs_and_scores(self, X_batch, l_batch, y_batch):
+    #     y_prob = self.predict_prob_y_given_X(X_batch)
+    #     l_prob = y_prob * self.C
+    #     l_est = l_prob > 0.5
+    #     y_est = y_prob > 0.5
+    #     scores = self._calculate_validation_metrics(
+    #         y_prob, y_batch, l_prob, l_batch.cpu().numpy(),
+    #         l_ests=l_est, y_ests=y_est.cpu().numpy()
+    #     )
+    #     return scores
 
 
     def predict_prob_y_given_X(self, X):
@@ -412,7 +496,7 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
             X = X.to(self.device)
             outputs = self.net(X)
             predicted_prob  = torch.nn.functional.softmax(outputs, dim=-1)[:,1]
-        return predicted_prob.cpu().numpy()
+        return predicted_prob
     
         
     def set_C(self, l_mean):

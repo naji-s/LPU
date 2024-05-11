@@ -1,14 +1,27 @@
-batchsize: 64
 device: cpu
 preset: figure1
 dataset: mnist
-labeled: 0
-unlabeled: 0
-numpy_dtype: float32
-epoch: 500
+numpy_dtype: float64
+epoch: 100
 beta: 0.0
 gamma: 1.0
 learning_rate: 0.001
 loss: sigmoid
 model: mlp
-out: /Users/naji/phd_codebase/lpu/scripts/nnPU/checkpoints
+out: lpu/scripts/nnPU/checkpoints
+data_generating_process: SB #SB # either of CC (case-control) or (SB) (selection-bias)
+
+dataset_kind: LPU
+batch_size: 
+  train: 64
+  test: null
+  val: null
+  holdout: null
+ratios: 
+  # *** NOTE ***
+  # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+  # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+  test: 0.05 
+  val: 0.4
+  holdout: .05 
+  train: .5 

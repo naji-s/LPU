@@ -52,12 +52,8 @@ class ElkanGGPC(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
 
     def set_C(self, holdout_dataloader):
         C_vals = []
-        for holdout_X, holdout_l, _ in holdout_dataloader:
+        for holdout_X, holdout_l, _, _ in holdout_dataloader:
             C_vals.append(self.predict_proba(holdout_X[holdout_l==1]))
         C_vals = np.hstack(C_vals)
         self.C = np.mean(C_vals, axis=0)
     
-    def validate(self, dataloader):
-        if self.C is None:
-            raise ValueError("C is not set. C needs to be calculated for Elkan & Noto method to work.")
-        return super().validate(dataloader)

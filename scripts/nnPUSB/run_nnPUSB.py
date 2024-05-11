@@ -1,72 +1,81 @@
-import copy
 import logging
 import unittest.mock
-import types 
-
+import types
 import numpy as np
 import torch.optim
-
 import lpu.external_libs.nnPUSB
 import lpu.external_libs.nnPUSB.nnPU_loss
-
-
-
-LOG = logging.getLogger(__name__)
-
-# import torch.optim
-
 import lpu.constants
-import lpu.datasets.LPUDataset
 import lpu.datasets.dataset_utils
 import lpu.utils.utils_general
 import lpu.external_libs.nnPUSB.dataset
 import lpu.models.nnPUSB
+import lpu.utils.plot_utils
 
+torch.set_default_dtype(lpu.constants.DTYPE)
 
-TRAIN_VAL_RATIO = .1
-HOLD_OUT_SIZE = None
-TRAIN_TEST_RATIO = .5
+USE_DEFAULT_CONFIG = False
+DEFAULT_CONFIG = {
+    'learning_rate': 0.01,
+    'epoch': 50,
+    'gamma': 1.0,
+    'beta': 0.0
+}
 
+LOG = lpu.utils.utils_general.configure_logger(__name__)
 
 def main():
+    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
     yaml_file_path = '/Users/naji/phd_codebase/lpu/configs/nnPUSB_config.yaml'
     config = lpu.utils.utils_general.load_and_process_config(yaml_file_path)
-    lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal', normalize=False, invert_l=False)
-    train_loader, test_loader, val_loader, holdout_loader = lpu.datasets.dataset_utils.create_stratified_splits(lpu_dataset, train_val_ratio=TRAIN_VAL_RATIO, batch_size=len(lpu_dataset), hold_out_size=HOLD_OUT_SIZE, train_test_ratio=TRAIN_TEST_RATIO)
-    # passing X to initialize_inducing_points to extract the initial values of inducing points
-    # nnPU_model = lpu.models.nnPU.nnPU(config)
-    args = types.SimpleNamespace(**config)
 
+    dataloaders_dict = lpu.datasets.dataset_utils.create_dataloaders_dict(config)
 
-    X_example, _, _ = next(iter(train_loader))
+    X_example, _, _, _ = next(iter(dataloaders_dict['train']))
     dim = X_example.shape[-1]
     nnPUSB_model = lpu.models.nnPUSB.nnPUSB(config=config, dim=dim)
-    nnPUSB_model.set_C(copy.deepcopy(train_loader))
+    nnPUSB_model.set_C(dataloaders_dict['holdout'])
+
     optimizer = torch.optim.Adam([{
-        'params': nnPUSB_model.parameters(), 'lr': config.get('learning_rate')
+        'params': nnPUSB_model.parameters(),
+        'lr': config.get('learning_rate', DEFAULT_CONFIG.get('learning_rate', None) if USE_DEFAULT_CONFIG else None)
     }])
+
     device = config.get('device', 'cpu')
-    # XYtrainLoader = lpu.external_libs.nnPUS/B.dataset.to_dataloader(trainX, trainY, args.batchsize)
-    # XYvalidLoader = lpu.external_libs.nnPUSB.dataset.to_dataloader(XYtrain[0], XYtrain[1], args.batchsize)
-    # XYtestLoader = lpu.external_libs.nnPUSB.dataset.to_dataloader(XYtest[0], XYtest[1], args.batchsize)
-    loss_func = lpu.external_libs.nnPUSB.nnPU_loss.nnPUSBloss(prior=nnPUSB_model.prior, gamma=args.gamma, beta=args.beta)
-    for i in range(args.epoch):
-        nnPUSB_model.train_one_epoch(dataloader=train_loader, optimizer=optimizer, loss_func=loss_func, device=device)
-        print(i, nnPUSB_model.validate(val_loader))
+    loss_func = lpu.external_libs.nnPUSB.nnPU_loss.nnPUSBloss(prior=nnPUSB_model.prior,
+                                                              gamma=config.get('gamma', DEFAULT_CONFIG.get('gamma', None) if USE_DEFAULT_CONFIG else None),
+                                                              beta=config.get('beta', DEFAULT_CONFIG.get('beta', None) if USE_DEFAULT_CONFIG else None))
 
+    num_epochs = config.get('epoch', DEFAULT_CONFIG.get('epoch', None) if USE_DEFAULT_CONFIG else None)
+    all_scores_dict = {split: {'epochs': []} for split in dataloaders_dict.keys()}
+    scores_dict = {split: {} for split in dataloaders_dict.keys()}
 
+    for epoch in range(num_epochs):
+        scores_dict_item = nnPUSB_model.train_one_epoch(dataloader=dataloaders_dict['train'], optimizer=optimizer, loss_func=loss_func, device=device)
+        scores_dict['train'].update(scores_dict_item)
+        all_scores_dict['train']['epochs'].append(epoch)
+
+        for split in ['val', 'test']:
+            scores_dict_item = nnPUSB_model.validate(dataloaders_dict[split])
+            scores_dict[split].update(scores_dict_item)
+            all_scores_dict[split]['epochs'].append(epoch)
+
+        for split in dataloaders_dict.keys():
+            for score_type, score_value in scores_dict[split].items():
+                if score_type not in all_scores_dict[split]:
+                    all_scores_dict[split][score_type] = []
+                all_scores_dict[split][score_type].append(score_value)
+
+        LOG.info(f"Epoch {epoch}: {scores_dict}")
+
+    lpu.utils.plot_utils.plot_scores(all_scores_dict, loss_type='overall_loss')
 
 if __name__ == "__main__":
     yaml_file_path = '/Users/naji/phd_codebase/lpu/configs/nnPUSB_config.yaml'
     config = lpu.utils.utils_general.load_and_process_config(yaml_file_path)
-    # lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal', normalize=False, invert_l=False)
-    # train_loader, test_loader, val_loader, holdout_loader = lpu.datasets.dataset_utils.create_stratified_splits(lpu_dataset, train_val_ratio=TRAIN_VAL_RATIO, batch_size=len(lpu_dataset), hold_out_size=HOLD_OUT_SIZE, train_test_ratio=TRAIN_TEST_RATIO)
-    # passing X to initialize_inducing_points to extract the initial values of inducing points
-    # nnPU_model = lpu.models.nnPU.nnPU(config)
     args = types.SimpleNamespace(**config)
 
     with unittest.mock.patch('lpu.external_libs.nnPUSB.args.device', return_value=args.device):
         import lpu.external_libs.nnPUSB.train
         import lpu.external_libs.nnPUSB.model
         main()
-

@@ -1,13 +1,15 @@
 device: cpu
-dataset: 'fashionMNIST'
+dataset_name:  animal_no_animal #fashionMNIST
+dataset_kind: LPU
 gpu: 9
 val_iterations: 30
 num_labeled: 3000
-learning_rate: 0.0003
+learning_rate: 0.001
 epochs: 50
 mix_alpha: 0.3
+data_generating_process: CC #SB # either of CC (case-control) or (SB) (selection-bias)
 lam: 0.3
-positive_label_list: [1, 4, 7]
+# positive_label_list: [1, 4, 7]
 random_seed: 0
 ratios: 
   # *** NOTE ***
@@ -17,12 +19,15 @@ ratios:
   val: 0.4
   holdout: 0.05
   train: .5
-dataset_kind: null
 batch_size: 
   train: 64
   test: 64
   val: 64
   holdout: 64
 
+  # train: 500
+  # test: 500
+  # val: 500
+  # holdout: 500
 
  

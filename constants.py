@@ -7,3 +7,4 @@ BATCH_SIZE = 64
 NUMPY_DTYPE = np.float64
 # assert str(NUMPY_DTYPE).split('.')[1].split("'")[0] == str(DTYPE).split('.')[1].split("'")[0]
 RANDOM_STATE = 4442
+SGP_INDUCING_POINTS_SIZE = None
