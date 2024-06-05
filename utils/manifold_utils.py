@@ -1,6 +1,8 @@
 # import matrix_utils
 import numpy as np
+import scipy.linalg
 import scipy.sparse.csgraph
+import scipy.special
 from sklearn.neighbors import kneighbors_graph
 from scipy.sparse.linalg import svds, eigsh
 import scipy.sparse
@@ -8,6 +10,7 @@ import scipy.sparse.linalg
 import torch
 # import tensorflow as tf
 import lpu.utils.matrix_utils as matrix_utils
+import lpu.constants
 # from matrix_utils import invert_mat_with_cholesky
 from numpy.linalg import LinAlgError, matrix_power
 DELTA = 1e-16
@@ -15,8 +18,10 @@ from scipy.linalg import cholesky
 from scipy.linalg.lapack import dtrtri
 
 def make_laplacian_moment(L, nu, p):
-    if p == 1:
-        return L + nu * torch.eye(L.shape[0])
+    if not np.allclose(np.round(p), p):
+        return torch.tensor(np.asarray(scipy.linalg.fractional_matrix_power(L + nu * torch.eye(L.shape[0]), p)), dtype=lpu.constants.DTYPE)
+    else:
+        return torch.matrix_power(L + nu * torch.eye(L.shape[0]), int(p))
     # # Compute eigenvalues and eigenvectors
     # eigenvalues, eigenvectors = torch.linalg.eigh(L)
     # # Modify eigenvalues
@@ -48,7 +53,15 @@ def build_W_torch(features, k_neighbours, lengthscale, connectivity):
     pairwise_dist = torch.cdist(features, features)
 
     # Find the k nearest neighbors (including self)
-    distances, indices = torch.topk(pairwise_dist, k_neighbours + 1, largest=False, sorted=True)
+    try:
+        distances, indices = torch.topk(pairwise_dist, k_neighbours + 1, largest=False, sorted=True)
+    except RuntimeError as e:
+        if 'selected index k out of range' in str(e):
+            # If k is too large, reduce it to the maximum possible value
+            k_neighbours = pairwise_dist.shape[1] // 2
+            distances, indices = torch.topk(pairwise_dist, k_neighbours + 1, largest=False, sorted=True)
+        else:
+            raise RuntimeError(f"Error in topk: {e}")
 
     if connectivity == 'connectivity':
         # Create a connectivity matrix (1 for connected, 0 for not connected)
@@ -134,6 +147,8 @@ def build_manifold_mat(W, manifold_kernel_info):
         elif 'laplacian' in kernel_type:
             # Compute the power of the Laplacian
             manifold_mat = make_laplacian_moment(Lap_mat, manifold_kernel_info['noise_factor'], manifold_kernel_info['power_factor']) 
+        else:
+            raise ValueError(f"Invalid kernel type: {kernel_type}. Supported types are 'heat' and 'laplacian'")
     except np.linalg.LinAlgError as e:
         # Handle linear algebra-specific errors
         raise np.linalg.LinAlgError(f"Linear algebra error during {kernel_type} calculation: {e}")

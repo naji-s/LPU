@@ -51,20 +51,20 @@ CLASS_PRIOR = {
     'alzheimer': 0.5
 }
 
-def create_loss(args, prior=None):
+def create_loss(config, prior=None):
     if prior is None:
-        prior = CLASS_PRIOR[args.dataset]
+        prior = CLASS_PRIOR[config['dataset']]
     print('prior: {}'.format(prior))
-    if args.loss == 'Dist-PU':
-        base_loss = lpu.external_libs.distPU.losses.distributionLoss.LabelDistributionLoss(prior=prior, device=args.device)
+    if config['loss'] == 'Dist-PU':
+        base_loss = lpu.external_libs.distPU.losses.distributionLoss.LabelDistributionLoss(prior=prior, device=config['device'])
     else:
         raise NotImplementedError("The loss: {} is not defined!".format(args.loss))
 
     def loss_fn_entropy(outputs, labels):
         scores = torch.sigmoid(torch.clamp(outputs, min=-10, max=10))
-        return base_loss(outputs, labels) + args.co_mu * lpu.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores[labels!=1])
+        return base_loss(outputs, labels) + config['co_mu'] * lpu.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores[labels!=1])
 
-    if args.entropy == 1:
+    if config['entropy'] == 1:
         return loss_fn_entropy
     return base_loss
 
@@ -141,19 +141,19 @@ class distPU(lpu.models.lpu_model_base.LPUModelBase):
         scheduler.step()
         return {'loss': loss_total / len(dataloader)}
 
-    def predict_prob_y_given_X(self, X):
-        self.model.eval()
+    def predict_prob_y_given_X(self, X=None, f_x=None):
         with torch.no_grad():
-            if type(X) == np.ndarray:
-                X = torch.tensor(X, dtype=lpu.constants.DTYPE)
-            X = X.to(self.device)
-            outputs = self.model(X).squeeze()
-            if outputs.dim() == 2:
-                outputs = outputs[:, 1]
-            predicted_prob = torch.nn.functional.sigmoid(outputs)
+            if f_x is None:
+                if type(X) == np.ndarray:
+                    X = torch.tensor(X, dtype=lpu.constants.DTYPE)
+                X = X.to(self.device)
+                f_x = self.model(X).squeeze()
+            if f_x.flatten().dim() == 2:
+                f_x = f_x[:, 1]
+            predicted_prob = torch.nn.functional.sigmoid(f_x)
         return predicted_prob.cpu().numpy().squeeze()
 
-    def predict_prob_l_given_y_X(self, X):
+    def predict_prob_l_given_y_X(self, X=None, f_x=None):
         return self.C
 
     def set_C(self, holdout_dataloader):

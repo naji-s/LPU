@@ -1,6 +1,10 @@
 from abc import abstractmethod
 import logging
 import random
+import sys
+sys.path.append('lpu/external_libs/DEDPUL')
+import unittest.mock
+
 
 import numpy as np
 import pandas as pd
@@ -15,6 +19,11 @@ import lpu.external_libs.DEDPUL
 import lpu.external_libs.DEDPUL.algorithms
 import lpu.external_libs.DEDPUL.NN_functions
 
+def expanding_wrapper(*args, **kwargs):
+    if 'center' in kwargs:
+        del kwargs['center']
+    return pd.core.window.Expanding(*args, **kwargs)
+
 LOG = logging.getLogger(__name__)
 
 EPSILON = 1e-16
@@ -27,17 +36,14 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
     Using estimator of p(s|X) to predict p(y|X)
     """
     @abstractmethod
-    def modified_train_NN(mix_data, pos_data, discriminator, d_optimizer, mix_data_test=None, pos_data_test=None,
-                n_epochs=200, batch_size=64, n_batches=None, n_early_stop=5,
-                d_scheduler=None, training_mode='standard', disp=False, loss_function=None, nnre_alpha=None,
-                metric=None, stop_by_metric=False, bayes=False, bayes_weight=1e-5, beta=0, gamma=1):
+    def modified_train_NN(mix_data, pos_data, discriminator, d_optimizer, mix_data_val=None, pos_data_val=None, mix_data_test=None, pos_data_test=None,
+                    n_epochs=200, batch_size=64, n_batches=None, n_early_stop=5,
+                    d_scheduler=None, training_mode='standard', disp=False, loss_function=None, nnre_alpha=None,
+                    metric=None, stop_by_metric=False, bayes=False, bayes_weight=1e-5, beta=0, gamma=1):
         """ ** NOTE **: Identical to the lpu.external_libs.DEDPUL.NN_functions.train_NN, but with some modifications to set the 
             type of variables in the model to global constant value lpu.constants.DTYPE
         Train discriminator to classify mix_data from pos_data.
         """
-        d_losses_train = []
-        d_losses_test = []
-        d_metrics_test = []
         if n_batches is None:
             n_batches = min(int(mix_data.shape[0] / batch_size), int(pos_data.shape[0] / batch_size))
             batch_size_mix = batch_size_pos = batch_size
@@ -47,7 +53,11 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
             data_test = np.concatenate((pos_data_test, mix_data_test))
             target_test = np.concatenate((np.zeros((pos_data_test.shape[0],)), np.ones((mix_data_test.shape[0],))))
 
+        d_losses_train = []
+        d_losses_val = []
+        d_losses_test = []
         for epoch in range(n_epochs):
+            d_metrics_test = []
             discriminator.train()
 
             d_losses_cur = []
@@ -79,7 +89,25 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                 d_optimizer.step()
                 d_losses_cur.append(loss.cpu().item())
 
-            d_losses_train.append(round(np.mean(d_losses_cur).item(), 5))
+            d_losses_train.append(np.mean(d_losses_cur))
+
+
+            if mix_data_val is not None and pos_data_val is not None:
+                discriminator.eval()
+
+                if training_mode == 'standard':
+                    if bayes:
+                        d_losses_val.append(lpu.external_libs.DEDPUL.NN_functions.d_loss_bayes(torch.as_tensor(mix_data_val, dtype=lpu.constants.DTYPE),
+                                                                torch.as_tensor(pos_data_val, dtype=lpu.constants.DTYPE),
+                                                                discriminator, w=bayes_weight).item())
+                    else:
+                        d_losses_val.append(lpu.external_libs.DEDPUL.NN_functions.d_loss_standard(torch.as_tensor(mix_data_val, dtype=lpu.constants.DTYPE),
+                                                                torch.as_tensor(pos_data_val, dtype=lpu.constants.DTYPE),
+                                                                discriminator).item())
+                elif training_mode == 'nnre':
+                    d_losses_val.append(lpu.external_libs.DEDPUL.NN_functions.d_loss_nnRE(torch.as_tensor(mix_data_val, dtype=lpu.constants.DTYPE),
+                                                        torch.as_tensor(pos_data_val, dtype=lpu.constants.DTYPE),
+                                                        discriminator, nnre_alpha).item())
 
             if mix_data_test is not None and pos_data_test is not None:
 
@@ -102,12 +130,6 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                     d_metrics_test.append(metric(target_test,
                                                 discriminator(torch.as_tensor(data_test, dtype=lpu.constants.DTYPE)).detach().numpy()))
 
-                if disp:
-                    if not metric:
-                        print('epoch', epoch, ', train_loss=', d_losses_train[-1], ', test_loss=', d_losses_test[-1])
-                    else:
-                        print('epoch', epoch, ', train_loss=', d_losses_train[-1], ', test_loss=', d_losses_test[-1],
-                            'test_metric=', d_metrics_test[-1])
 
                 if epoch >= n_early_stop:
                     if_stop = True
@@ -117,20 +139,20 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                                 if_stop = False
                                 break
                         else:
-                            if d_losses_test[-i-1] < d_losses_test[-n_early_stop-1]:
+                            if d_losses_val[-i-1] < d_losses_val[-n_early_stop-1]:
                                 if_stop = False
                                 break
                     if if_stop:
                         break
-            # elif disp:
-            print('epoch', epoch, ', train_loss=', d_losses_train[-1])
+            elif disp:
+                print('epoch', epoch, ', train_loss=', d_losses_train[-1], ', val_loss=', d_losses_val[-1])
 
         discriminator.eval()
 
-        return d_losses_train, d_losses_test
+        return d_losses_train, d_losses_val, d_losses_test
 
     @abstractmethod
-    def modified_estimate_preds_cv(df, target, cv=3, n_networks=1, lr=1e-4, hid_dim=32, n_hid_layers=1,
+    def modified_estimate_preds_cv(df, target, test_df, test_target, cv=3, n_networks=1, lr=1e-4, hid_dim=32, n_hid_layers=1,
                         random_state=None, training_mode='standard', alpha=None, l2=1e-4, train_nn_options=None,
                         all_conv=False, bayes=False, bn=True):
         """ ** NOTE ** Identical to lpu.external_libs.DEDPUL.algorithms.estimate_preds_cv, but with some modifications to output the discriminator
@@ -160,20 +182,29 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
         means = np.zeros((n_networks, df.shape[0],))
         variances = np.zeros((n_networks, df.shape[0],))
 
-        import torch.optim as optim
+        preds_test = np.zeros((n_networks, test_df.shape[0],))
+        means_test = np.zeros((n_networks, test_df.shape[0],))
+        variances_test = np.zeros((n_networks, test_df.shape[0],))
 
+        import torch.optim as optim
+        mix_data_test = test_df[test_target == 1]
+        pos_data_test = test_df[test_target == 0]
+
+        all_d_loss_train = []
+        all_d_loss_val = []
+        all_d_loss_test = []
         for i in range(n_networks):
             kf = sklearn.model_selection.StratifiedKFold(n_splits=cv, shuffle=True, random_state=random_state)
-            for train_index, test_index in kf.split(df, target):
+            for train_index, val_index in kf.split(df, target):
                 train_data = df[train_index]
                 train_target = target[train_index]
                 mix_data = train_data[train_target == 1]
                 pos_data = train_data[train_target == 0]
-                test_data = df[test_index]
-                test_target = target[test_index]
+                val_data = df[val_index]
+                val_target = target[val_index]
 
-                mix_data_test = test_data[test_target == 1]
-                pos_data_test = test_data[test_target == 0]
+                mix_data_val = val_data[val_target == 1]
+                pos_data_val = val_data[val_target == 0]
                 if not all_conv:
                     discriminator = lpu.external_libs.DEDPUL.algorithms.get_discriminator(inp_dim=df.shape[1], out_dim=1, hid_dim=hid_dim,
                                                     n_hid_layers=n_hid_layers, bayes=bayes, bn=bn)
@@ -183,24 +214,57 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                 d_optimizer = optim.Adam(discriminator.parameters(), lr=lr, weight_decay=l2)
 
                 
-                DEDPUL.modified_train_NN(mix_data, pos_data, discriminator, d_optimizer,
-                        mix_data_test, pos_data_test, nnre_alpha=alpha,
+                d_losses_train, d_losses_val, d_losses_test = DEDPUL.modified_train_NN(mix_data=mix_data, pos_data=pos_data,discriminator=discriminator,d_optimizer=d_optimizer,
+                        mix_data_val=mix_data_val, pos_data_val=pos_data_val, mix_data_test=mix_data_test, pos_data_test=pos_data_test,
+                        nnre_alpha=alpha,
                         d_scheduler=None, training_mode=training_mode, bayes=bayes, **train_nn_options)
+                if len(all_d_loss_train):
+                    min_length = min(all_d_loss_train.shape[1], len(d_losses_train))
+
+                    all_d_loss_train = np.vstack([all_d_loss_train[:, :min_length], np.asarray([d_losses_train[:min_length]])])
+                    all_d_loss_val = np.vstack([all_d_loss_val[:, :min_length], np.asarray([d_losses_val[:min_length]])])
+                    all_d_loss_test = np.vstack([all_d_loss_test[:, :min_length], np.asarray([d_losses_test[:min_length]])])
+
+                else:
+                    # adding a new axis to make it a 2D array so that we can stack them
+                    # in the first clause of the if statement
+                    all_d_loss_train = np.array([d_losses_train])
+                    all_d_loss_val = np.array([d_losses_val])
+                    all_d_loss_test = np.array([d_losses_test])
+
+                
                 if bayes:
                     pred, mean, var = discriminator(
-                        torch.as_tensor(test_data, dtype=lpu.constants.DTYPE), return_params=True, sample_noise=False)
-                    preds[i, test_index], means[i, test_index], variances[i, test_index] = \
+                        torch.as_tensor(val_data, dtype=lpu.constants.DTYPE), return_params=True, sample_noise=False)
+                    preds[i, val_index], means[i, val_index], variances[i, val_index] = \
                         pred.detach().numpy().flatten(), mean.detach().numpy().flatten(), var.detach().numpy().flatten()
                 else:
-                    preds[i, test_index] = discriminator(
-                        torch.as_tensor(test_data, dtype=lpu.constants.DTYPE)).detach().numpy().flatten()
+                    preds[i, val_index] = discriminator(
+                        torch.as_tensor(val_data, dtype=lpu.constants.DTYPE)).detach().numpy().flatten()
 
+                if bayes:
+                    pred, mean, var = discriminator(
+                        torch.as_tensor(test_df, dtype=lpu.constants.DTYPE), return_params=True, sample_noise=False)
+                    preds_test[i, :], means_test[i, :], variances_test[i, :] = \
+                        pred.detach().numpy().flatten(), mean.detach().numpy().flatten(), var.detach().numpy().flatten()
+                else:
+                    preds_test[i, :] = discriminator(
+                        torch.as_tensor(test_df, dtype=lpu.constants.DTYPE)).detach().numpy().flatten()
+        
         preds = preds.mean(axis=0)
+        preds_test = preds_test.mean(axis=0)
+
+        loss_dict = {}
+        loss_dict['train'] = np.mean(all_d_loss_train, axis=0) 
+        loss_dict['val'] = np.mean(all_d_loss_val, axis=0)
+        loss_dict['test'] = np.mean(all_d_loss_test, axis=0)
+
         if bayes:
             means, variances = means.mean(axis=0), variances.mean(axis=0)
-            return preds, means, variances
+            means_test, variances_test = means_test.mean(axis=0), variances_test.mean(axis=0)
+            return (preds, means, variances), (preds_test, means_test, variances_test), loss_dict
         else:
-            return preds, discriminator
+            return preds, preds_test, loss_dict
         
     def modified_estimate_poster_em(diff=None, preds=None, target=None, mode='dedpul', converge=True, tol=10**-5,
                         max_iterations=1000, nonconverge=True, step=0.001, max_diff=0.05, plot=False, disp=False,
@@ -300,7 +364,7 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
 
 
     @abstractmethod
-    def modified_estimate_poster_cv(df, target, estimator='dedpul', bayes=False, alpha=None, lr=None, estimate_poster_options=None,
+    def modified_estimate_poster_cv(df, target, test_df, test_target, estimator='dedpul', bayes=False, alpha=None, lr=None, estimate_poster_options=None,
                         estimate_diff_options=None, estimate_preds_cv_options=None, train_nn_options=None, cv=None):
         """
         identical to 
@@ -330,7 +394,6 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
             df = df.values
         if isinstance(target, pd.Series):
             target = target.values
-
         training_mode = 'standard'
 
         if train_nn_options is None:
@@ -345,21 +408,24 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
         if estimate_preds_cv_options is None:
             estimate_preds_cv_options = dict()
 
-        # preds = estimate_preds_cv_catboost(df, target, **estimate_preds_cv_options)
-        ### uncomment the line above and comment the line below for experiments with catboost instead of neural networks
-        preds, discrinimator = DEDPUL.modified_estimate_preds_cv(df=df, cv=cv, target=target, alpha=alpha, training_mode=training_mode, bayes=bayes,
-                                train_nn_options=train_nn_options, lr=lr,  **estimate_preds_cv_options)
-        if bayes:
-            preds, means, variances = preds
+        with unittest.mock.patch('pandas.core.window.Expanding', new=expanding_wrapper):
+            # preds = estimate_preds_cv_catboost(df, target, **estimate_preds_cv_options)
+            ### uncomment the line above and comment the line below for experiments with catboost instead of neural networks
+            preds, preds_test, loss_dict = DEDPUL.modified_estimate_preds_cv(df=df, cv=cv, target=target, test_df=test_df, test_target=test_target, alpha=alpha, training_mode=training_mode, bayes=bayes,
+                                    train_nn_options=train_nn_options, lr=lr,  **estimate_preds_cv_options)
+            if bayes:
+                (preds, means, variances), (preds_test, means_test, variances_test), loss_dict = preds, preds_test, loss_dict
 
-        if estimator in {'dedpul', 'baseline_dedpul', 'ntc_methods'}:
             if bayes:
                 diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff_bayes(means, variances, target, **estimate_diff_options)
+                diff_test = lpu.external_libs.DEDPUL.algorithms.estimate_diff_bayes(means_test, variances_test, target, **estimate_diff_options)
             else:
                 diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds, target, **estimate_diff_options)
+                diff_test = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds_test, test_target, **estimate_diff_options)
 
-        alpha, poster = DEDPUL.modified_estimate_poster_em(diff=diff, mode='dedpul', alpha=alpha, **estimate_poster_options)
-        return alpha, poster, preds
+            alpha, poster = DEDPUL.modified_estimate_poster_em(diff=diff, mode='dedpul', alpha=alpha, **estimate_poster_options)
+            _, poster_test = DEDPUL.modified_estimate_poster_em(diff=diff_test, mode='dedpul', alpha=alpha, **estimate_poster_options)
+        return alpha, poster, poster_test, preds, preds_test, loss_dict
         
     def __init__(self, config, *args, **kwargs):
         self.config = config
@@ -405,9 +471,8 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
         all_X_train = torch.vstack(all_X_train)
         all_l_train = torch.hstack(all_l_train)
         all_y_train = torch.hstack(all_y_train)
-        l_mean = all_l_train.mean().detach().cpu().numpy()
-        # all_l_train = 1 - all_l_train
 
+        
         all_X_val = []
         all_l_val = []  
         all_y_val = []
@@ -434,25 +499,46 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
         val_size = len(all_X_val)
         test_size = len(all_X_test)
 
+        concat_X = torch.vstack([all_X_train, all_X_val])
+        concat_l = torch.hstack([all_l_train, all_l_val])
+        
+        # inverting the labels as DEDPUL assume unlabeled data has target==1,
+        # while LPU datasets have lebel==0 for unlabeled data
+        concat_l = 1 - concat_l
+        all_l_test = 1 - all_l_test
 
-        concat_X = torch.vstack((all_X_train, all_X_val, all_X_test, all_X_train[all_l_train == 1]))
-        concat_l = torch.hstack((torch.ones(train_size + val_size + test_size), torch.zeros(((all_l_train == 1).sum().to(int)))))
-        
-        
-        alpha_posterior, n_in_unlabeled_posterior, preds = DEDPUL.modified_estimate_poster_cv(concat_X, concat_l, estimator='dedpul', bayes=False, alpha=None, lr=self.config['learning_rate'],
+        alpha_posterior, n_in_unlabeled_posterior, n_in_unlabeled_posterior_test, preds,  preds_test, loss_dict = DEDPUL.modified_estimate_poster_cv(df=concat_X, target=concat_l, 
+                                                                                                                                                     test_df=all_X_test, test_target=all_l_test,
+                                                                                                                                                     estimator='dedpul', bayes=False, alpha=None, lr=self.config['learning_rate'],
                                                                                               estimate_diff_options=self.config['estimate_diff_options'],
                                                                                             train_nn_options=train_nn_options, cv=self.config['cv'])
-        self.C = l_mean * (1 - alpha_posterior)
 
-        y_probs = 1 - n_in_unlabeled_posterior
-        l_probs = y_probs * self.C
-        l_ests = l_probs > self.C * .5
-        y_ests = y_probs > .5 
+        # inverting the labels again to match the LPU dataset assumption,
+        # i.e. label==0 for unlabeled data
+        concat_l = 1 - concat_l
+        all_l_test = 1 - all_l_test
+        
+        y_probs = 1 - preds
+        # concat_l == 0 since the value of unlabeledness is inverted
+        y_probs[concat_l == 0] = 1 - n_in_unlabeled_posterior
+        l_probs = 1 - preds
+
+        y_probs_test = 1 - preds_test
+        y_probs_test[all_l_test == 0] = 1 - n_in_unlabeled_posterior_test
+        l_probs_test = 1 - preds_test
+
+        l_ests = l_probs > .5
+        y_ests = y_probs > .5
+        l_ests_test = l_probs_test > .5
+        y_ests_test = y_probs_test > .5
+
+
         metrics = dict()
         metrics['train'] = self._calculate_validation_metrics(y_probs[:train_size], all_y_train, l_probs[:train_size], all_l_train, l_ests=l_ests[:train_size], y_ests=y_ests[:train_size])
         metrics['val'] = self._calculate_validation_metrics(y_probs[train_size:train_size+val_size], all_y_val, l_probs[train_size:train_size+val_size], all_l_val, l_ests=l_ests[train_size:train_size+val_size], y_ests=y_ests[train_size:train_size+val_size])
-        metrics['test'] = self._calculate_validation_metrics(y_probs[train_size+val_size:], all_y_test, l_probs[train_size+val_size:], all_l_test, l_ests=l_ests[train_size+val_size:], y_ests=y_ests[train_size+val_size:])
-
+        metrics['test'] = self._calculate_validation_metrics(y_probs=y_probs_test, y_vals=all_y_test, l_probs=l_probs_test, l_vals=all_l_test, l_ests=l_ests_test, y_ests=y_ests_test)
+        for key in metrics:
+            metrics[key].update({'overall_loss': loss_dict[key][-1]})
         return metrics
 
         

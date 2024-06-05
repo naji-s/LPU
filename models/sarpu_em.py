@@ -26,8 +26,7 @@ class BasePU:
         if sample_weight is not None:
             weights_pos = sample_weight*weights_pos
             weights_neg = sample_weight*weights_neg
-            
-        Xp = np.concatenate([x,x])
+        Xp = np.concatenate([x,x], axis=0)
         Yp = np.concatenate([np.ones_like(s), np.zeros_like(s)])
         Wp = np.concatenate([weights_pos, weights_neg])
         return Xp, Yp, Wp
@@ -79,45 +78,57 @@ class SARPU(lpu.models.lpu_model_base.LPUModelBase):
     def __init__(self, config, *args, **kwargs):
         self.config = config
         self.kernel_mode = config.get('kernel_mode', 1)
+        self.max_iter = config.get('num_epochs', 1)
         LOG.info(f"kernel_mode: {self.kernel_mode}")
         super().__init__()
-        self.max_iter = config.get('max_iter', 1)
-        self.classification_model = SVMPU()
+        self.max_iter = config.get('num_epochs', 1)
+        self.classification_model = self.choose_SAR_PU_model()
         self.propensity_model = None
 
-    # def train(self, dataloader):
-    #     try:
-    #         assert (dataloader.batch_size == len(dataloader.dataset)), "There should be only one batch in the dataloader."
-    #     except AssertionError as e:
-    #         LOG.error(f"There should be only one batch in the dataloader, but {dataloader.batch_size} is smaller than {len(dataloader.dataset)}.")
-    #         raise e
-    #     X, l, _, _ = next(iter(dataloader))
-    #     X = X.numpy()
-    #     l = l.numpy()
-    #     propensity_attributes = np.ones_like(X[0]).astype(int)
-    #     self.classification_model, self.propensity_model, self.results = lpu.external_libs.SAR_PU.sarpu.sarpu.pu_learning.pu_learn_sar_em(X, l, classification_model=self.classification_model, propensity_attributes=propensity_attributes, max_its=self.max_iter)
+    def choose_SAR_PU_model(self):
+        return {'svm': SVMPU(**self.config['svm_params']),
+        'logistic': LogisticRegressionPU(**self.config['logistic_params'])}[self.config['SAR_PU_classification_model']]
 
     def train(self, dataloader, holdout_dataloader=None):
-        try:
-            assert (dataloader.batch_size == len(dataloader.dataset)), "There should be only one batch in the dataloader."
-        except AssertionError as e:
-            LOG.error(f"There should be only one batch in the dataloader, but {dataloader.batch_size} is smaller than {len(dataloader.dataset)}.")
-            raise e
+        X = []
+        l = []
+        y = []
+        # put all the data in one list
+        for data in dataloader:
+            X_batch, l_batch, y_batch, _ = data
+            X.append(X_batch.numpy())
+            l.append(l_batch.numpy())
+            y.append(y_batch.numpy())
+        # concatenate the data
+        X_batch_concat = np.concatenate(X)
+        l_batch_concat = np.concatenate(l)
+        y_batch_concat = np.concatenate(y)
 
-        X, l, y, _ = next(iter(dataloader))
-        X = X.numpy()
-        l = l.numpy()
-        y = y.numpy()
-        propensity_attributes = np.ones_like(X[0]).astype(int)
+        # find out the binary type of the data
+        binary_kind = set(np.unique(y))
 
+        propensity_attributes = np.ones(X_batch_concat.shape[-1]).astype(int)
         self.classification_model, self.propensity_model, self.results = lpu.external_libs.SAR_PU.sarpu.sarpu.pu_learning.pu_learn_sar_em(
-            X, l, classification_model=self.classification_model, propensity_attributes=propensity_attributes, max_its=self.max_iter)
+            X_batch_concat, l_batch_concat, classification_model=self.classification_model, propensity_attributes=propensity_attributes, max_its=self.max_iter)
 
-        scores_dict = self.calculate_probs_and_scores(X, l, y)
+        y_batch_concat_prob = self.predict_prob_y_given_X(X=X_batch_concat)
+        l_batch_concat_prob = self.predict_proba(X=X_batch_concat)
+        y_batch_concat_est = self.predict_y_given_X(X=X_batch_concat)
+        l_batch_concat_est = self.predict(X=X_batch_concat)
+        
+        # _calculate_validation_metrics assumes that the data is in {0, 1},
+        # so we need to convert the data to {0, 1} if it is in {-1, 1}
+        if binary_kind == {-1, 1}:
+            l_batch_concat = (l_batch_concat + 1) // 2
+            y_batch_concat = (y_batch_concat + 1) // 2
+        scores_dict = self._calculate_validation_metrics(
+            y_batch_concat_prob, y_batch_concat, l_batch_concat_prob, l_batch_concat, l_ests=l_batch_concat_est, y_ests=y_batch_concat_est
+        )
+
         
         return scores_dict
 
-    def predict_prob_y_given_X(self, X):
+    def predict_prob_y_given_X(self, X=None, f_x=None):
         return self.classification_model.predict_proba(X)
 
     def predict_prob_l_given_y_X(self, X):
@@ -129,4 +140,52 @@ class SARPU(lpu.models.lpu_model_base.LPUModelBase):
         propensity_scores = self.predict_prob_l_given_y_X(X)
         return lpu.external_libs.SAR_PU.sarpu.sarpu.pu_learning.loglikelihood_probs(class_probabilities, propensity_scores, l)
 
-    
+    def validate(self, dataloader, loss_fn=None):
+        scores_dict = {}
+        total_loss = 0.
+        l_batch_concat = []
+        y_batch_concat = []
+        y_batch_concat_prob = []
+        l_batch_concat_prob = []
+        l_batch_concat_est = []
+        y_batch_concat_est = []
+        binary_kind = set(np.unique(dataloader.dataset.y))
+        for batch_num, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
+            loss = loss_fn(X_batch, l_batch)
+            y_batch_prob = self.predict_prob_y_given_X(X_batch)
+            l_batch_prob = self.predict_proba(X=X_batch)
+            y_batch_est = self.predict_y_given_X(X=X_batch)
+            l_batch_est = self.predict(X=X_batch)
+            
+
+
+            total_loss += loss.item()
+
+            l_batch_concat.append(l_batch)
+            y_batch_concat.append(y_batch)
+            y_batch_concat_prob.append(y_batch_prob)
+            l_batch_concat_prob.append(l_batch_prob)
+            y_batch_concat_est.append(y_batch_est)
+            l_batch_concat_est.append(l_batch_est)   
+
+        y_batch_concat_prob = np.concatenate(y_batch_concat_prob)
+        l_batch_concat_prob = np.concatenate(l_batch_concat_prob)
+        y_batch_concat_est = np.concatenate(y_batch_concat_est)
+        l_batch_concat_est = np.concatenate(l_batch_concat_est)
+        y_batch_concat = np.concatenate(y_batch_concat)
+        l_batch_concat = np.concatenate(l_batch_concat)
+
+        if binary_kind == {-1, 1}:
+            y_batch_concat = (y_batch_concat + 1) / 2
+            l_batch_concat = (l_batch_concat + 1) / 2
+
+        scores_dict = self._calculate_validation_metrics(
+            y_batch_concat_prob, y_batch_concat, l_batch_concat_prob, l_batch_concat, l_ests=l_batch_concat_est, y_ests=y_batch_concat_est
+        )
+
+        # for score_type in scores_dict:
+        #     scores_dict[score_type] = np.mean(scores_dict[score_type])
+        total_loss /= (batch_num + 1)
+        scores_dict['overall_loss'] = total_loss
+
+        return scores_dict      

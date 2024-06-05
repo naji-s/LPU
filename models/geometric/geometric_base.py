@@ -12,6 +12,7 @@ import abc
 import lpu.constants
 import lpu.models.geometric.GVGP
 import lpu.models.lpu_model_base
+import lpu.utils.utils_general
 
 DEVICE = 'cpu'
 EPOCH_BLOCKS = 1
@@ -29,7 +30,7 @@ INTRINSIC_KERNEL_PARAMS = {
     'invert_M_first': False
 }
 
-LOG = logging.getLogger(__name__)
+LOG = lpu.utils.utils_general.configure_logger(__name__)
 
 
 class GeometricGPLPUBase(lpu.models.lpu_model_base.LPUModelBase):
@@ -97,40 +98,65 @@ class GeometricGPLPUBase(lpu.models.lpu_model_base.LPUModelBase):
         return self.config.get('intrinsic_kernel_params', INTRINSIC_KERNEL_PARAMS)
 
 
-    def loss_fn(self, X_batch, l_batch):
-        self.gp_model.update_input_data(X_batch)
-        self.likelihood.update_input_data(X_batch)
-        output = self.gp_model(X_batch)
-        loss = -self.mll(output, l_batch)
+    def loss_fn(self, l_output, l_batch):
+        loss = -self.mll(l_output, l_batch)
         return loss
 
     def train_one_epoch(self, dataloader, optimizer, holdout_dataloader=None):
         self.gp_model.train()
         self.likelihood.train()
-        total_loss = 0.
+        overrall_loss = 0.
         num_of_batches = 0
         scores_dict = {}
+        l_batch_concat = []
+        y_batch_concat = []
+        y_batch_concat_prob = []
+        l_batch_concat_prob = []
+        l_batch_concat_est = []
+        y_batch_concat_est = []
+
+            
         for batch_idx, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
             X_batch.to(self.device)
             l_batch.to(self.device)
             LOG.debug(f"Batch {batch_idx} is being processed now")
-            loss = self.loss_fn(X_batch, l_batch)
             optimizer.zero_grad()
-            total_loss += loss
-            loss.backward()
-            optimizer.step()
+            self.likelihood.update_input_data(X_batch)
+            self.gp_model.update_input_data(X_batch)
+            f_x = self.gp_model(X_batch)
+            loss = self.loss_fn(f_x, l_batch)
             num_of_batches += 1
-            if holdout_dataloader is not None:
-                self.set_C(holdout_dataloader)
-            batch_scores = self.calculate_probs_and_scores(X_batch, l_batch, y_batch)
-            for score_type, score_value in batch_scores.items():
-                if score_type not in scores_dict:
-                    scores_dict[score_type] = []
-                scores_dict[score_type].append(score_value)
-        self.gp_model.eval()
-        self.likelihood.eval()
-        total_loss = total_loss.item() / num_of_batches
-        for score_type in scores_dict:
-            scores_dict[score_type] = np.mean(scores_dict[score_type])
-        scores_dict['overall_loss'] = total_loss
-        return scores_dict
+            
+            y_batch_prob = self.predict_prob_y_given_X(f_x=f_x)
+            l_batch_prob = self.predict_proba(X=X_batch, f_x=f_x)
+            y_batch_est = self.predict_y_given_X(f_x=f_x)
+            l_batch_est = self.predict(X=X_batch, f_x=f_x)
+
+            if isinstance(y_batch_prob, np.ndarray):
+                y_batch_prob = torch.tensor(y_batch_prob, dtype=lpu.constants.DTYPE)
+                l_batch_prob = torch.tensor(l_batch_prob, dtype=lpu.constants.DTYPE)
+                y_batch_est = torch.tensor(y_batch_est, dtype=lpu.constants.DTYPE)
+                l_batch_est = torch.tensor(l_batch_est, dtype=lpu.constants.DTYPE)
+            loss.backward()
+            overrall_loss += loss.item()
+            optimizer.step()
+            l_batch_concat.append(l_batch.detach().cpu().numpy())
+            y_batch_concat.append(y_batch.detach().cpu().numpy())
+            y_batch_concat_prob.append(y_batch_prob.detach().cpu().numpy())
+            l_batch_concat_prob.append(l_batch_prob.detach().cpu().numpy())
+            y_batch_concat_est.append(y_batch_est.detach().cpu().numpy())
+            l_batch_concat_est.append(l_batch_est.detach().cpu().numpy())
+
+        y_batch_concat_prob = np.concatenate(y_batch_concat_prob)
+        l_batch_concat_prob = np.concatenate(l_batch_concat_prob)
+        y_batch_concat_est = np.concatenate(y_batch_concat_est)
+        l_batch_concat_est = np.concatenate(l_batch_concat_est)
+        y_batch_concat = np.concatenate(y_batch_concat)
+        l_batch_concat = np.concatenate(l_batch_concat)
+        scores_dict = self._calculate_validation_metrics(
+            y_batch_concat_prob, y_batch_concat, l_batch_concat_prob, l_batch_concat, l_ests=l_batch_concat_est, y_ests=y_batch_concat_est
+        )
+
+        # average loss
+        scores_dict['overall_loss'] = overrall_loss / (batch_idx + 1)
+        return scores_dict 

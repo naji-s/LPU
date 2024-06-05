@@ -28,7 +28,7 @@ LOG = logging.getLogger(__name__)
 
 import lpu.constants
 import lpu.datasets.LPUDataset
-import lpu.datasets.dataset_utils
+import lpu.utils.dataset_utils
 import lpu.utils.utils_general
 import lpu.external_libs.nnPUlearning.train
 
@@ -44,7 +44,7 @@ def main():
     yaml_file_path = '/Users/naji/phd_codebase/lpu/configs/nnPU_chainer_config.yaml'
     config = lpu.utils.utils_general.load_and_process_config(yaml_file_path)
     lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal', normalize=False, invert_l=False)
-    train_loader, test_loader, val_loader, holdout_loader = lpu.datasets.dataset_utils.create_stratified_splits(lpu_dataset, train_val_ratio=TRAIN_VAL_RATIO, batch_size=len(lpu_dataset), hold_out_size=HOLD_OUT_SIZE, train_test_ratio=TRAIN_TEST_RATIO)
+    train_loader, test_loader, val_loader, holdout_loader = lpu.utils.dataset_utils.create_stratified_splits(lpu_dataset, train_val_ratio=TRAIN_VAL_RATIO, batch_size=len(lpu_dataset), hold_out_size=HOLD_OUT_SIZE, train_test_ratio=TRAIN_TEST_RATIO)
     # passing X to initialize_inducing_points to extract the initial values of inducing points
     # nnPU_model = lpu.models.nnPU.nnPU(config)
     args = types.SimpleNamespace(**config)

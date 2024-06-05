@@ -1,65 +1,144 @@
 import logging
 import unittest.mock
-import sys
-sys.path.append('/Users/naji/phd_codebase/lpu/external_libs/SAR_PU')
-sys.path.append('/Users/naji/phd_codebase/lpu/external_libs/SAR_PU/sarpu')
-
 import numpy as np
 import torch
 import lpu.constants
 import lpu.datasets.LPUDataset
+import sys
+sys.path.append('lpu/external_libs/SAR_PU')
+sys.path.append('lpu/external_libs/SAR_PU/sarpu')
+sys.path.append('lpu/external_libs/SAR_PU/sarpu/sarpu')
+import lpu.models.sarpu_em
+import lpu.utils.utils_general
+import lpu.utils.dataset_utils
+import lpu.utils.plot_utils
 import lpu.external_libs.SAR_PU.sarpu.sarpu.PUmodels
 import lpu.external_libs.SAR_PU.sarpu.sarpu.pu_learning
 import lpu.external_libs.SAR_PU.sarpu
 import lpu.external_libs.SAR_PU.sarpu.sarpu
-import lpu.models.sarpu_em
-import lpu.utils.utils_general
-import lpu.datasets.dataset_utils
-import lpu.utils.plot_utils
 
 torch.set_default_dtype(lpu.constants.DTYPE)
 
 USE_DEFAULT_CONFIG = False
 DEFAULT_CONFIG = {
-    'max_iter': 10
+    "inducing_points_size": 32,
+    "learning_rate": 0.001,
+    "num_epochs": 5,
+    "device": "cpu",
+    "epoch_block": 1,
+    "dataset_name": "animal_no_animal",  # could also be fashionMNIST
+    "dataset_kind": "LPU",
+    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
+
+    # setting up parameters for the classification model of sar_pu
+    "SAR_PU_classification_model": 'logistic',
+    "svm_params": 
+        {
+        'tol': 1e-4,
+        'C': 1.0,
+        'kernel': 'rbf', 
+        'degree': 3, 
+        'gamma': 'scale',
+        'class_weight': None,
+        'random_state': None,  
+         'max_iter':-1, 
+         'cache_size':200,
+         'decision_function_shape': 'ovr', 
+         'verbose': 0    
+        },
+    'logistic_params':
+        {'penalty': 'l2', 
+         'dual': False, 
+         'tol':1e-4, 
+         'C': 1.0,
+         'fit_intercept': True, 
+         'intercept_scaling': 1, 
+         'class_weight': None,
+         'random_state': None, 
+         'solver': 'liblinear', 
+         'max_iter': 100,
+         'multi_class': 'ovr', 
+         'verbose': 0, 
+         'warm_start': False, 
+         'n_jobs': 1
+        },
+    "ratios": {
+        "test": 0.25,
+        "val": 0.2,
+        "holdout": 0.05,
+        "train": 0.5
+    },
+    "batch_size": {
+        "train": None,
+        "test": None,
+        "val": None,
+        "holdout": None
+    }
 }
 
-ORIGINAL_LOG_FUNC = np.log   
+
+ORIGINAL_LOG_FUNC = np.log
+
 def stable_log(x):
     return ORIGINAL_LOG_FUNC(x + lpu.constants.EPSILON)
 
 LOG = lpu.utils.utils_general.configure_logger(__name__)
 
-def main():
+# Optional dynamic import for Ray
+try:
+    import ray.util.client
+    import ray.train
+    RAY_AVAILABLE = True
+except ImportError:
+    LOG.warning("Ray is not available. Please install Ray to enable distributed training.")
+    RAY_AVAILABLE = False
+
+def train_model(config=None):
+
+
+    if config is None:
+        config = {}
+    # Load the base configuration
+    config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+
     lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
-    yaml_file_path = '/Users/naji/phd_codebase/lpu/configs/SARPU_config.yaml'
-    config = lpu.utils.utils_general.load_and_process_config(yaml_file_path)
-    max_iter = config.get('max_iter', DEFAULT_CONFIG.get('max_iter', None) if USE_DEFAULT_CONFIG else None)
 
     lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')
-    BATCH_SIZE = len(lpu_dataset)
-    dataloaders_dict = lpu.datasets.dataset_utils.create_dataloaders_dict(config)
-
+    dataloaders_dict = lpu.utils.dataset_utils.create_dataloaders_dict(config)
     sarpu_em_model = lpu.models.sarpu_em.SARPU(config, training_size=len(dataloaders_dict['train'].dataset))
 
-    all_scores_dict = {split: {} for split in dataloaders_dict.keys()}
+    all_scores_dict = {split: {} for split in ['train', 'val']}
+    scores_dict = {split: {} for split in ['train', 'val']}
 
-    scores_dict = {split: {} for split in dataloaders_dict.keys()}
-    scores_dict_item = sarpu_em_model.train(dataloaders_dict['train'])
-    scores_dict['train'].update(scores_dict_item)
+    scores_dict['train'] = sarpu_em_model.train(dataloaders_dict['train'])
+    scores_dict['val'] = sarpu_em_model.validate(dataloaders_dict['val'], loss_fn=sarpu_em_model.loss_fn)
 
-    for split in ['val', 'test']:
-        scores_dict_item = sarpu_em_model.validate(dataloaders_dict[split], loss_fn=sarpu_em_model.loss_fn)
-        scores_dict[split].update(scores_dict_item)
-
-    for split in dataloaders_dict.keys():
+    for split in ['train', 'val']:
         all_scores_dict[split].update(scores_dict[split])
+
+    # Evaluate on the test set after training
+    scores_dict['test'] = sarpu_em_model.validate(dataloaders_dict['test'], loss_fn=sarpu_em_model.loss_fn)
 
     LOG.info(f"Scores: {scores_dict}")
     # lpu.utils.plot_utils.plot_scores(all_scores_dict, loss_type='overall_loss')
 
+    # Flatten scores_dict
+    flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+    filtered_scores_dict = {}
+    for key, value in flattened_scores.items():
+        if 'train' in key or 'val' in key or 'test' in key:
+            if 'epochs' not in key:
+                filtered_scores_dict[key] = value
+    print("Reporting Metrics: ", filtered_scores_dict)  # Debug print to check keys
+
+    # Report metrics if executed under Ray Tune
+    if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+        ray.train.report(filtered_scores_dict)
+    else:
+        return all_scores_dict
+
 if __name__ == "__main__":
     with unittest.mock.patch.object(np, 'log', stable_log) as mock_info:
         # since https://github.com/ML-KULeuven/SAR-PU/blob/c51f8af2b9604c363b6d129b7ad03b8db488346f/sarpu/sarpu/pu_learning.py#L162
-        # can lead to unstable values (log of zero probs) we cchange the log function
-        main()
+        # can lead to unstable values (log of zero probs) we change the log function
+        train_model()

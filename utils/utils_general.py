@@ -57,10 +57,39 @@ def set_seed(seed):
 
 def configure_logger(module_name):
     logger = logging.getLogger(module_name)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(lpu.constants.LOG_LEVEL)
     # formatter = logging.Formatter('[[ LOGGING %(asctime)s - %(name)s - %(levelname)s ]]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     formatter = logging.Formatter('[[[ --- LOGGING --- %(asctime)s - %(pathname)s.%(name)s - %(levelname)s ]]]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
     return logger
+
+def deep_update(source, updates):
+    """
+    Recursively update a dictionary with another dictionary.
+    This modifies `source` in place.
+    """
+    for key, value in updates.items():
+        if isinstance(value, dict):
+            source[key] = deep_update(source.get(key, {}), value)
+        else:
+            source[key] = value
+
+    # Add this loop to ensure keys not present in `updates` are preserved
+    for key in source:
+        if key not in updates:
+            if isinstance(source[key], dict):
+                source[key] = deep_update(source[key], {})
+
+    return source
+
+def flatten_dict(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)

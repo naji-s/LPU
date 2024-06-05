@@ -23,7 +23,10 @@ class LPUDataset(torch.utils.data.Dataset):
     A dataset class for loading, preprocessing, and partitioning data 
     for learning purposes. This class is designed to be used with PyTorch
     """
-    def __init__(self, data_dict=None, device=None, dataset_name=None,  transform=normalize_features, target_transform=None, load_all_data=True, invert_l=False):   
+    def __init__(self, data_dict=None, device=None, dataset_name=None,  
+                 transform=normalize_features, target_transform=None, 
+                 label_transform=None,
+                 load_all_data=True):   
         """
         Initializes the dataset with data or loads from a specified dataset name. 
 
@@ -40,19 +43,16 @@ class LPUDataset(torch.utils.data.Dataset):
         else:
             X, l, y, index = data_dict.get('X', None), data_dict.get('l', None), data_dict.get('y', None), data_dict.get('index', np.arange(len(data_dict['X'])))
 
-
         self.transform = transform
         self.target_transform = target_transform
+        self.label_transform = label_transform
         self.data_dict = data_dict
         self.device = device
         if not load_all_data:
             raise NotImplementedError("load_all_data=False is not supported yet. ")
 
-
         if dataset_name:
             X, y, l = self._read_data(dataset_name)
-        if invert_l:
-            l = 1 - l
 
         if index is not None:
             self._index = index            
@@ -62,6 +62,7 @@ class LPUDataset(torch.utils.data.Dataset):
         X, l, y = X[self._index], l[self._index], y[self._index]
 
         X, l, y = self._check_input(X, l, y)
+
         if type(X) == np.ndarray:
             X, l, y = map(
                 lambda arr: torch.tensor(arr, dtype=lpu.constants.DTYPE), [X, l, y])
@@ -71,10 +72,10 @@ class LPUDataset(torch.utils.data.Dataset):
         # Normalize the input features
         if transform:
             X = self.transform(X)     
-
         if target_transform:
             y = self.target_transform(y)
-            l = self.target_transform(l)
+        if label_transform:
+            l = self.label_transform(l)
 
         self.X, self.l, self.y = X, l, y
 

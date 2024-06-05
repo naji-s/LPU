@@ -10,7 +10,7 @@ LOG = logging.getLogger(__name__)
 
 import lpu.constants
 import lpu.datasets.LPUDataset
-import lpu.datasets.dataset_utils
+import lpu.utils.dataset_utils
 import lpu.models.nnPU_dedpul
 import lpu.utils.utils_general
 
@@ -26,7 +26,7 @@ def main():
     config['kernel_mode'] = 2
     lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal', normalize=False, invert_l=False)
     BATCH_SIZE = len(lpu_dataset)
-    train_loader, test_loader, val_loader, holdout_loader = lpu.datasets.dataset_utils.create_stratified_splits(lpu_dataset, train_val_ratio=TRAIN_VAL_RATIO, batch_size=BATCH_SIZE, hold_out_size=HOLD_OUT_SIZE, train_test_ratio=TRAIN_TEST_RATIO)
+    train_loader, test_loader, val_loader, holdout_loader = lpu.utils.dataset_utils.create_stratified_splits(lpu_dataset, train_val_ratio=TRAIN_VAL_RATIO, batch_size=BATCH_SIZE, hold_out_size=HOLD_OUT_SIZE, train_test_ratio=TRAIN_TEST_RATIO)
     # passing X to initialize_inducing_points to extract the initial values of inducing points
     nnPU_model = lpu.models.nnPU_dedpul.nnPU(config)
     preds = nnPU_model.train(train_loader)

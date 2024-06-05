@@ -1,82 +1,63 @@
-import logging
-import os
-import tempfile
-
+import json
+import ray.tune
 import ray.train
 
-import torch
+import lpu.scripts.psychm.run_psychm
 
-import lpu.constants
-import lpu.models.psychm.psychm
-import lpu.models.psychm.run_psychm
-import lpu.utils.utils_general
+def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
+    # Configuration for hyperparameters to be tuned
+    search_space = {
+        "inducing_points_size": ray.tune.choice([32, 64]),
+        "learning_rate": ray.tune.loguniform(1e-4, 1e-1),
+        "num_epochs": ray.tune.choice(range(5, max_num_epochs)),
+        "intrinsic_kernel_params": {
+            "normed": ray.tune.choice([True, False]),
+            "noise_factor": ray.tune.uniform(0, 0.1),
+            "amplitude": ray.tune.uniform(0.1, 1),
+            "n_neighbor": ray.tune.randint(3, 10),
+            "lengthscale": ray.tune.loguniform(1e-2, 1),
+            "neighbor_mode": ray.tune.choice(['connectivity', 'distance']),
+            "power_factor": ray.tune.randint(1, 3),
+            "invert_M_first": ray.tune.choice([True, False]),
+            "normalize": ray.tune.choice([True, False])
+        },
+        "batch_size": {
+            "train": ray.tune.choice([32, 64, 128]),
+            "test": ray.tune.choice([32, 64, 128]),
+            "val": ray.tune.choice([32, 64, 128]),
+            "holdout": ray.tune.choice([32, 64, 128])
+        },
 
-# Create a logger instance
-LOG = logging.getLogger(__name__)
+    }
 
-LEARNING_RATE = 0.01
-INDUCING_POINTS_SIZE = 32
-BATCH_SIZE = 32
-TRAIN_VAL_RATIO = .1
-ELKAN_HOLD_OUT_SIZE = 0.
-TRAIN_TEST_RATIO = .5
+    reporter = ray.tune.CLIReporter(metric_columns=[
+        "val_overall_loss", "val_y_auc", "val_y_accuracy", "val_y_APS",
+        "test_overall_loss", "test_y_auc", "test_y_accuracy", "test_y_APS"])
 
-INTRINSIC_KERNEL_PARAMS = {
-    'normed': False,
-    'kernel_type': 'laplacian',
-    'heat_temp': .01,
-    'noise_factor': 0.,
-    'amplitude':  0.5,
-    'n_neighbor': 10,
-    'lengthscale':  0.3, 
-    'neighbor_mode': 'distance',
-    'power_factor': 1,
-    'invert_M_first': False 
-}
+    result = ray.tune.run(
+        lpu.scripts.psychm.run_psychm.train_model,
+        resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
+        config=search_space,
+        num_samples=num_samples,
+        metric='val_overall_loss',
+        mode='min',
+        local_dir=results_dir,
+        progress_reporter=reporter,
+        max_concurrent_trials=8)
 
-def tune_train_psychm(config={}):
-    # Instantiate your SKLearnCompatibleGP with the provided configuration
-    model = lpu.models.psychm.psychm.PsychMGP(dtype=config['dtype'], train_val_ratio=config['train_val_ratio'], 
-                     device=config['device'], learning_rate=config['learning_rate'], 
-                     num_epochs=config['num_epochs'], evaluation_interval=config['evaluation_interval'], 
-                     epoch_blocks=config['epoch_blocks'], intrinsic_kernel_params=config['intrinsic_kernel_params'])
-    model._setup(config=config)    
-    # Fit the model
-    epoch = 1
-    while True:        
-        model._train_one_epoch()
-        val_loss, val_auc = model._validate()  # Assuming `score` returns an evaluation metric
-    
-        # In Ray Tune, you report results with `tune.report`
-        # ray.train.report({"val_loss":val_loss, "training_iteration": epoch, 'val_auc': val_auc})
-        with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
-            checkpoint = None
-            if (epoch + 1) % 5 == 0:
-                # This saves the model to the trial directory
-                checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
-                torch.save(
-                    model.gp_model.state_dict(),
-                    os.path.join(temp_checkpoint_dir, "gp_model.pth")
-                )
-                torch.save(
-                    model.likelihood.state_dict(),
-                    os.path.join(temp_checkpoint_dir, "likelihood.pth")
-                )
-
-                # Send the current training result back to Tune
-            ray.train.report({"val_loss":val_loss.item(), "training_iteration": epoch, 'val_auc': val_auc}, checkpoint=checkpoint)        
-        epoch += 1
-
+    best_trial = result.get_best_trial("val_overall_loss", "min", "last")
+    best_trial_report = {
+        "Best trial config": best_trial.config,
+        "Best trial final validation loss": best_trial.last_result["val_overall_loss"],
+        "Best trial final test scores": {
+            "test_overall_loss": best_trial.last_result["test_overall_loss"],
+            "test_y_auc": best_trial.last_result["test_y_auc"],
+            "test_y_accuracy": best_trial.last_result["test_y_accuracy"],
+            "test_y_APS": best_trial.last_result["test_y_APS"]
+        }
+    }
+    print (json.dumps(best_trial_report, indent=4))
+    return best_trial_report
 
 if __name__ == "__main__":
-        # Define your configuration
-    yaml_file_path = '/Users/naji/phd_codebase/lpu/configs/psychm_config.yaml'
-    config = lpu.utils.utils_general.load_and_process_config(yaml_file_path)
-
-    # tune_train_psychm(config=config)
-    # Then, use this function with Ray Tune
-    ray.tune.run(
-    tune_train_psychm,
-    config=config,  # Your configuration here,
-    stop={"training_iteration": 10},
-    )
+    main()

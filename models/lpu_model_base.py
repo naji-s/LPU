@@ -5,7 +5,7 @@ import torch
 
 import lpu.constants
 import lpu.datasets.animal_no_animal.animal_no_animal_utils
-import lpu.datasets.dataset_utils
+import lpu.utils.dataset_utils
 import lpu.utils.dataset_utils  
 
 class LPUModelBase(torch.nn.Module):
@@ -40,7 +40,7 @@ class LPUModelBase(torch.nn.Module):
         pass
 
     
-    def predict_prob_y_given_X(self, X):
+    def predict_prob_y_given_X(self, X=None, f_x=None):
         """
         Predicts the probability of y given x.
 
@@ -52,7 +52,7 @@ class LPUModelBase(torch.nn.Module):
         """
         pass
 
-    def predict_prob_l_given_y_X(self, X):
+    def predict_prob_l_given_y_X(self, X=None, f_x=None):
         """
         Predicts the probability of label l given input features X and y=1,
         i.e. p(l|y=1, X).
@@ -65,13 +65,13 @@ class LPUModelBase(torch.nn.Module):
         """
         pass
 
-    def predict(self, X, threshold=.5):
-        return self.predict_proba(X) >= threshold
+    def predict(self, X=None, f_x=None, threshold=.5):
+        return self.predict_proba(X=X, f_x=f_x) >= threshold
     
-    def predict_y_given_X(self, X, threshold=.5):
-        return self.predict_prob_y_given_X(X) >= threshold
+    def predict_y_given_X(self, X=None, f_x=None, threshold=.5):
+        return self.predict_prob_y_given_X(X=X, f_x=f_x) >= threshold
 
-    def predict_proba(self, X):
+    def predict_proba(self, X=None, f_x=None):
         """
         Predicts the probability of l given X, i.e. p(l|X).
         Note that this is not the same as predict_prob_l_given_y_X. 
@@ -85,7 +85,7 @@ class LPUModelBase(torch.nn.Module):
         Returns:
             array-like: An array of shape (n_samples, n_classes) containing the predicted probabilities for each class.
         """
-        return self.predict_prob_y_given_X(X) * self.predict_prob_l_given_y_X(X)
+        return self.predict_prob_y_given_X(X=X, f_x=f_x) * self.predict_prob_l_given_y_X(X=X)
     
     def _calculate_validation_metrics(self, y_probs, y_vals, l_probs, l_vals, l_ests=None, y_ests=None):
         """
@@ -100,6 +100,10 @@ class LPUModelBase(torch.nn.Module):
         Returns:
             dict: A dictionary containing the validation metrics.
         """
+        if set(np.unique(y_vals)).union(np.unique(l_vals)).issubset({-1, 1}):
+            y_vals = (y_vals + 1) / 2
+            l_vals = (l_vals + 1) / 2
+
         metrics = {}
         metrics['l_accuracy'] = sklearn.metrics.accuracy_score(l_vals, l_ests)
         # breakpoint()
@@ -129,7 +133,17 @@ class LPUModelBase(torch.nn.Module):
         metrics['y_ll'] = sklearn.metrics.log_loss(y_vals, y_probs)
         metrics['l_ll'] = sklearn.metrics.log_loss(l_vals, l_probs)
         return metrics
-    
+    def calculate_probs_and_scores(self, X_batch, l_batch, y_batch):
+        y_prob = self.predict_prob_y_given_X(X_batch)
+        l_prob = y_prob * self.C
+        l_est = l_prob > 0.5
+        y_est = y_prob > 0.5
+        scores = self._calculate_validation_metrics(
+            y_prob, y_batch, l_prob, l_batch.cpu().numpy(),
+            l_ests=l_est, y_ests=y_est.cpu().numpy()
+        )
+        return scores
+
     # def validate(self, dataloader, loss_fn=None, output_model=None):
     #     y_probs = []
     #     l_probs = []
@@ -154,12 +168,12 @@ class LPUModelBase(torch.nn.Module):
     #                 losses.append(loss_fn(output_model(X_val), l_val).item())
     #             else:
     #                 losses.append(0)
-    #         y_probs = np.hstack(y_probs)
-    #         y_vals = np.hstack(y_vals).astype(int)
-    #         l_probs = np.hstack(l_probs)
-    #         l_vals = np.hstack(l_vals).astype(int)
-    #         l_ests = np.hstack(l_ests).astype(int)
-    #         y_ests = np.hstack(y_ests).astype(int)
+    #         y_probs = np.concatenate(y_probs)
+    #         y_vals = np.concatenate(y_vals).astype(int)
+    #         l_probs = np.concatenate(l_probs)
+    #         l_vals = np.concatenate(l_vals).astype(int)
+    #         l_ests = np.concatenate(l_ests).astype(int)
+    #         y_ests = np.concatenate(y_ests).astype(int)
     #         validation_results = self._calculate_validation_metrics(
     #             y_probs, y_vals, l_probs, l_vals, l_ests=l_ests, y_ests=y_ests)
     #         validation_results.update({'overall_loss': np.mean(losses)})
@@ -167,49 +181,71 @@ class LPUModelBase(torch.nn.Module):
     def validate(self, dataloader, loss_fn=None, model=None):
         scores_dict = {}
         total_loss = 0.
-        num_of_batches = 0        
+        l_batch_concat = []
+        y_batch_concat = []
+        y_batch_concat_prob = []
+        l_batch_concat_prob = []
+        l_batch_concat_est = []
+        y_batch_concat_est = []
+        if hasattr(model, 'eval'):
+            model.eval()
+        binary_kind = set(np.unique(dataloader.dataset.y if hasattr(dataloader.dataset, 'y') else dataloader.dataset.Y))
         with torch.no_grad():
-            for X_batch, l_batch, y_batch, _ in dataloader:
+            for batch_num, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
+
                 if self.config['data_generating_process'] == 'CC':
-                    X_batch_concat = torch.concat([X_batch, X_batch[l_batch==1]], dim=0)
-                    l_batch_concat = torch.concat([torch.zeros_like(l_batch), torch.ones((int(l_batch.sum().detach().cpu().numpy().squeeze())))], dim=0)
-                    y_batch_concat = torch.concat([y_batch, y_batch[l_batch==1]], dim=0)
-                else:
-                    X_batch_concat = X_batch
-                    l_batch_concat = l_batch
-                    y_batch_concat = y_batch
+                    X_batch = torch.concat([X_batch, X_batch[l_batch==1]], dim=0)
+                    y_batch = torch.concat([y_batch, y_batch[l_batch==1]], dim=0)
+                    l_batch = torch.concat([torch.zeros_like(l_batch), torch.ones((int(l_batch.sum().detach().cpu().numpy().squeeze())))], dim=0)
+                if hasattr(model, 'update_input_data'):
+                    model.update_input_data(X_batch)
+                f_x = model(X_batch)
+                loss = loss_fn(f_x, l_batch)
+                y_batch_prob = self.predict_prob_y_given_X(f_x=f_x)
+                l_batch_prob = self.predict_proba(f_x=f_x)
+                y_batch_est = self.predict_y_given_X(f_x=f_x)
+                l_batch_est = self.predict(f_x=f_x)
+                
+                if isinstance(y_batch_prob, np.ndarray):
+                    y_batch_prob = torch.tensor(y_batch_prob, dtype=lpu.constants.DTYPE)
+                    l_batch_prob = torch.tensor(l_batch_prob, dtype=lpu.constants.DTYPE)
+                    y_batch_est = torch.tensor(y_batch_est, dtype=lpu.constants.DTYPE)
+                    l_batch_est = torch.tensor(l_batch_est, dtype=lpu.constants.DTYPE)
 
-                batch_scores = self.calculate_probs_and_scores(X_batch_concat, l_batch_concat, y_batch_concat)
-                for score_type, score_value in batch_scores.items():
-                    if score_type not in scores_dict:
-                        scores_dict[score_type] = []
-                    scores_dict[score_type].append(score_value)
-                if loss_fn:
-                    if model is not None:
-                        model_out = model(X_batch_concat)
-                        if model_out.squeeze().dim() == 2:
-                            model_out = model_out[:, 1]
-                    else:
-                        model_out = X_batch_concat
-                    loss = loss_fn(model_out, l_batch_concat)
-                    total_loss += loss.item()
-                else:
-                    total_loss = 0.
-                num_of_batches += 1     
 
-        for score_type in scores_dict:
-            scores_dict[score_type] = np.mean(scores_dict[score_type])
-        total_loss /= num_of_batches
+                total_loss += loss.item()
+
+                l_batch_concat.append(l_batch.detach().cpu().numpy())
+                y_batch_concat.append(y_batch.detach().cpu().numpy())
+                y_batch_concat_prob.append(y_batch_prob.detach().cpu().numpy())
+                l_batch_concat_prob.append(l_batch_prob.detach().cpu().numpy())
+                y_batch_concat_est.append(y_batch_est.detach().cpu().numpy())
+                l_batch_concat_est.append(l_batch_est.detach().cpu().numpy())   
+
+        y_batch_concat_prob = np.concatenate(y_batch_concat_prob)
+        l_batch_concat_prob = np.concatenate(l_batch_concat_prob)
+        y_batch_concat_est = np.concatenate(y_batch_concat_est)
+        l_batch_concat_est = np.concatenate(l_batch_concat_est)
+        y_batch_concat = np.concatenate(y_batch_concat)
+        l_batch_concat = np.concatenate(l_batch_concat)
+
+        if binary_kind == {-1, 1}:
+            y_batch_concat = (y_batch_concat + 1) / 2
+            l_batch_concat = (l_batch_concat + 1) / 2
+        scores_dict = self._calculate_validation_metrics(
+            y_batch_concat_prob, y_batch_concat, l_batch_concat_prob, l_batch_concat, l_ests=l_batch_concat_est, y_ests=y_batch_concat_est
+        )
+
+        # for score_type in scores_dict:
+        #     scores_dict[score_type] = np.mean(scores_dict[score_type])
+        total_loss /= (batch_num + 1)
         scores_dict['overall_loss'] = total_loss
 
         return scores_dict    
 
-    def calculate_probs_and_scores(self, X_batch, l_batch, y_batch):
-        y_prob = self.predict_prob_y_given_X(X_batch)
-        l_prob = self.predict_proba(X_batch)
-        l_est = self.predict(X_batch)
-        y_est = self.predict_y_given_X(X_batch)
-        scores = self._calculate_validation_metrics(
-            y_prob, y_batch, l_prob, l_batch, l_ests=l_est, y_ests=y_est
-        )
-        return scores
+    # def calculate_probs(self, X_batch=None, raw_output=None):
+    #     y_batch_prob = self.predict_prob_y_given_X(X=X_batch, raw_output=raw_output)
+    #     l_batch_prob = self.predict_proba(X=X_batch, 
+    #     l_batch_est = self.predict(X_batch)
+    #     y_batch_est = self.predict_y_given_X(X_batch)
+    #     return y_batch_prob, l_batch_prob, l_batch_est, y_batch_est

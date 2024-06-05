@@ -6,7 +6,6 @@ import torch.nn
 import lpu.external_libs.PU_learning.utils
 import lpu.models.lpu_model_base
 import lpu.external_libs.PU_learning.estimator
-import lpu.external_libs.PU_learning.train_PU
 import lpu.constants
 import lpu.utils
 import lpu.utils.auxiliary_models
@@ -184,25 +183,26 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
             p_targets = p_targets.to(self.device)
             u_targets = u_targets.to(self.device)
 
-
+            # breakpoint()
         
             inputs =  torch.cat((p_inputs, u_inputs), dim=0)
             targets =  torch.cat((p_targets, u_targets), dim=0)
+            true_targets = torch.cat([p_targets, u_true_targets])
             inputs = inputs.to(self.device)
 
 
             outputs = self.net(inputs)
 
             if self.config['data_generating_process'] == 'SB':
-                y_batch = u_true_targets
-                l_batch = torch.ones_like(u_targets)
-                inputs_batch = u_inputs
-                outputs_batch = outputs[len(p_targets):]
+                offset = 0
             else:
-                y_batch = u_targets
-                l_batch = torch.ones_like(u_targets)
-                inputs_batch = u_inputs
-                outputs_batch = outputs[len(p_targets):]
+                offset = len(p_targets)
+                
+            y_batch = true_targets[offset:]
+            l_batch = targets[offset:]
+            inputs_batch = inputs[offset:]
+            outputs_batch = outputs[offset:]
+
 
             if len(all_ls) == 0:
                 all_ls = l_batch
@@ -241,7 +241,7 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
         all_l_ests = all_l_outputs > 0.5 * self.C
         all_y_ests = all_y_outputs > 0.5
         all_scores = self._calculate_validation_metrics(y_probs=all_y_outputs, y_vals=all_ys, l_probs=all_l_outputs, l_vals=all_ls, l_ests=all_l_ests, y_ests=all_y_ests)
-        all_scores['total_loss'] = total_loss / (batch_idx + 1)
+        all_scores['overall_loss'] = total_loss / (batch_idx + 1)
         return all_scores
             # else:
             #     scores_dict = {'loss': total_loss / (batch_idx + 1), 'accuracy': 100. * correct / total_size}
@@ -377,7 +377,7 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
         all_l_ests = all_l_outputs > 0.5 * self.C
         all_y_ests = all_y_outputs > 0.5
         all_scores = self._calculate_validation_metrics(y_probs=all_y_outputs, y_vals=all_ys, l_probs=all_l_outputs, l_vals=all_ls, l_ests=all_l_ests, y_ests=all_y_ests)
-        all_scores['total_loss'] = total_loss
+        all_scores['overall_loss'] = total_loss
         all_scores['p_loss'] = total_p_loss
         all_scores['u_loss'] = total_u_loss
         return all_scores
@@ -470,10 +470,7 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
 
         validation_results = self._calculate_validation_metrics(
             y_probs, y_vals, l_probs, l_vals, l_ests=l_ests, y_ests=y_ests)
-        validation_results['total_loss'] = total_loss/(batch_idx+1)
-        # validation_results.update({'overall_loss': np.mean(losses)})
-        # losses = losses[-1]
-        # validation_results['total_loss'] = np.mean(losses)
+        validation_results['overall_loss'] = total_loss/(batch_idx+1)
         return validation_results
 
     # def calculate_probs_and_scores(self, X_batch, l_batch, y_batch):
@@ -488,21 +485,20 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
     #     return scores
 
 
-    def predict_prob_y_given_X(self, X):
-        self.net.eval()
-        with torch.no_grad():
+    def predict_prob_y_given_X(self, X=None, f_x=None):
+        if f_x is None:
             if type(X) == np.ndarray:
                 X = torch.tensor(X, dtype=lpu.constants.DTYPE)
             X = X.to(self.device)
-            outputs = self.net(X)
-            predicted_prob  = torch.nn.functional.softmax(outputs, dim=-1)[:,1]
+            f_x = self.net(X)
+        predicted_prob  = torch.nn.functional.softmax(f_x, dim=-1)[:,1]
         return predicted_prob
     
         
     def set_C(self, l_mean):
         self.C = l_mean * self.alpha_estimate
     
-    def predict_prob_l_given_y_X(self, X):
+    def predict_prob_l_given_y_X(self, X=None, f_x=None):
         return self.C
         
 

@@ -4,6 +4,7 @@ datapath: null #data/FMNIST_data
 num_labeled: null #10000
 num_workers: 1
 loss: Dist-PU
+data_generating_process: SS
 warm_up_lr: 0.001
 lr: .001
 warm_up_weight_decay: 0.005
@@ -16,23 +17,24 @@ co_entropy: 0.004
 alpha: 6.0
 co_mix_entropy: 0.04
 co_mixup: 5.0
-warm_up_epochs: 100
-pu_epochs: 100
+warm_up_epochs: 10
+pu_epochs: 50
 random_seed: 0
 ratios: 
   # *** NOTE ***
   # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
   # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-  test: 0.05
-  val: 0.4
-  holdout: 0.05
-  train: .5
+  test: 0.25 
+  val: 0.2
+  holdout: .05 
+  train: .5 
+
 dataset_kind: LPU
 batch_size: 
   train: 64
   test: 64
   val: 64
   holdout: 64
-
+best_model_loc: /Users/naji/phd_codebase/lpu/scripts/distPU/best_model_checkpoints
 
  

@@ -1,0 +1,2 @@
+This folder contains scripts that try to be as faithful as possible to the original code, without any conversions. This means that they are just a wrapper
+around the original PU libraries such as mpe, kme, or sarpu. Their wrapper enables them to potentially be tuned with Ray Tune.

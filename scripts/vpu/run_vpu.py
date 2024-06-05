@@ -1,27 +1,12 @@
-
 import copy
 import math
+
 import sys
-
-
-
 
 sys.path.append('lpu/external_libs/PU_learning')
 import lpu.scripts.mpe.run_mpe
 
 sys.path.append('lpu/external_libs/vpu')
-
-import lpu.external_libs.vpu.data
-
-
-from matplotlib import pyplot as plt
-import torch.nn
-import torch.utils.data
-import numpy as np
-
-import lpu.constants
-import lpu.datasets.dataset_utils
-import lpu.datasets.LPUDataset
 import lpu.external_libs
 import lpu.external_libs.vpu
 import lpu.external_libs.vpu.dataset
@@ -35,22 +20,51 @@ import lpu.external_libs.vpu.model.model_cifar
 import lpu.external_libs.vpu.model.model_fashionmnist
 import lpu.external_libs.vpu.model.model_stl
 import lpu.external_libs.vpu.model.model_vec
+import lpu.external_libs.vpu.data    
+
+from matplotlib import pyplot as plt
+import torch.nn
+import torch.utils.data
+import numpy as np
+
+import lpu.constants
+import lpu.utils.dataset_utils
+import lpu.datasets.LPUDataset
+
 import lpu.models
 import lpu.models.vpu
 
 import lpu.utils.auxiliary_models
+import lpu.utils.plot_utils
 import lpu.utils.utils_general
 
+DEFAULT_CONFIG = {
+    "device": "cpu",
+    "dataset_name": "animal_no_animal",  # could also be fashionMNIST
+    "dataset_kind": "LPU",
+    "gpu": 9,
+    "val_iterations": 30,
+    "num_labeled": 3000,
+    "learning_rate": 0.0001,
+    "epochs": 50,
+    "mix_alpha": 0.3,
+    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
+    "lam": 0.3,
+    "random_seed": 0,
+    "ratios": {
+        "test": 0.25,
+        "val": 0.2,
+        "holdout": 0.05,
+        "train": 0.5
+    },
+    "batch_size": {
+        "train": 64,
+        "test": 64,
+        "val": 64,
+        "holdout": 64
+    }
+}
 
-
-
-    
-LEARNING_RATE = 0.01
-INDUCING_POINTS_SIZE = 32
-BATCH_SIZE = 32
-HOLDOUT_RATIO = 0.05
-VAL_RATIO = 0.10
-TEST_RATIO = 0.35
 
 def get_loaders_by_dataset_name(dataset_name):
     """ Returns the data loader functions based on the dataset name. """
@@ -77,31 +91,36 @@ def get_positive_labels(dataset_name):
     }
     return default_labels.get(dataset_name)
 
+LOG = lpu.utils.utils_general.configure_logger(__name__)
 
-def main():
+# Optional dynamic import for Ray
+try:
+    import ray.util.client
+    import ray.train
+    RAY_AVAILABLE = True
+except ImportError:
+    LOG.warning("Ray is not available. Please install Ray to enable distributed training.")
+    RAY_AVAILABLE = False
+
+def train_model(config=None):
+    if config is None:
+        config = {}
+    # Load the base configuration
+    base_config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+
     lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
-    yaml_file_path = '/Users/naji/phd_codebase/lpu/configs/vpu_config.yaml'
-    config = lpu.utils.utils_general.load_and_process_config(yaml_file_path)
-    positive_label_list = get_positive_labels(config['dataset_name'])
+
+    positive_label_list = get_positive_labels(base_config['dataset_name'])
 
     ###########################################################################
     # START: data preparation
     ###########################################################################
-    if config['dataset_kind'] in ['LPU', 'MPE']:
-        dataloaders_dict = lpu.scripts.mpe.run_mpe.create_dataloaders_dict_mpe(config, drop_last=True)
-        # test_labeled_X = dataloaders_dict['test']['PDataset'].dataset.data
-        # test_pos_X = dataloaders_dict['test']['UDataset'].dataset.pos_data
-        # test_neg_X = dataloaders_dict['test']['UDataset'].dataset.neg_data
-        # test_X = np.concatenate([test_labeled_X, test_pos_X, test_neg_X], axis=0)
-        # test_y = np.concatenate([np.ones(len(test_labeled_X)), np.ones(len(test_pos_X)), np.zeros(len(test_neg_X))], axis=0)
-        # test_l = np.concatenate([np.ones(len(test_labeled_X)), np.zeros(len(test_pos_X)), np.zeros(len(test_neg_X))], axis=0)
-        # test_loader = lpu.datasets.dataset_utils.make_data_loader(lpu.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict={'X': test_X, 'l': test_l, 'y': test_y}), batch_size=config['batch_size']['test'], drop_last=False)[1]
-        
+    if base_config['dataset_kind'] in ['LPU', 'MPE']:
+        dataloaders_dict = lpu.scripts.mpe.run_mpe.create_dataloaders_dict_mpe(base_config, drop_last=True)
     else:
-        get_loaders = get_loaders_by_dataset_name(config['dataset_name'])
+        get_loaders = get_loaders_by_dataset_name(base_config['dataset_name'])
         # TODO: make sure the datasets are balanced coming out of this
-        x_loader, p_loader, val_x_loader, val_p_loader,  test_loader, idx = get_loaders(batch_size=config['batch_size']['train'], num_labeled=config['num_labeled'], positive_label_list=positive_label_list)
-        # x_loader, p_loader, val_x_loader, val_p_loader,  test_loader, idx
+        x_loader, p_loader, val_x_loader, val_p_loader,  test_loader, idx = get_loaders(batch_size=base_config['batch_size']['train'], num_labeled=base_config['num_labeled'], positive_label_list=positive_label_list)
         dataloaders_dict = {}
         dataloaders_dict['train'] = {}
         dataloaders_dict['train']['PDataset'] = p_loader
@@ -109,45 +128,88 @@ def main():
         dataloaders_dict['val'] = {}
         dataloaders_dict['val']['PDataset'] = val_p_loader
         dataloaders_dict['val']['UDataset'] = val_x_loader
-    
 
     ###########################################################################
     # START: training
     ###########################################################################
-    # lpu.external_libs.vpu.vpu.run_vpu(config, loaders, lpu.external_libs.vpu.model.model_cifar.NetworkPhi)    
     lowest_val_var = math.inf  # lowest variational loss on validation set
     highest_test_acc = -1 # highest test accuracy on test set
-    vpu_model = lpu.models.vpu.VPU(config=config, input_dim=dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
-        
+    vpu_model = lpu.models.vpu.VPU(config=base_config, input_dim=dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
+
     l_mean = len(dataloaders_dict['train']['PDataset'].dataset) / (len(dataloaders_dict['train']['UDataset'].dataset) + len(dataloaders_dict['train']['PDataset'].dataset))
-    # set up the optimizer
-    lr_phi = config['learning_rate']
+    lr_phi = base_config['learning_rate']
     opt_phi = torch.optim.Adam(vpu_model.parameters(), lr=lr_phi, betas=(0.5, 0.99))
 
-    for epoch in range(config['epochs']):
+    all_scores_dict = {split: {'epochs': []} for split in ['train', 'val']}
+    scores_dict = {split: {} for split in ['train', 'val']}
 
+    best_epoch = -1
+    best_val_loss = float('inf')
+    for epoch in range(base_config['epochs']):
         # adjust the optimizer
         if epoch % 20 == 19:
             lr_phi /= 2
             opt_phi = torch.optim.Adam(vpu_model.parameters(), lr=lr_phi, betas=(0.5, 0.99))
-        avg_phi_loss, avg_var_loss, avg_reg_loss = vpu_model.train_one_epoch(config=config, 
-                                                                             opt_phi=opt_phi, 
-                                                                             p_loader=dataloaders_dict['train']['PDataset'], 
-                                                                             u_loader=dataloaders_dict['train']['UDataset'])
-        # since the way original repo of VPU calcuylates error is based on the actual test set
-        # with target values with no access to labeled/unlabeled values (i.e. no $l$, and only $y$)
-        if config['dataset_kind'] in ['LPU', 'MPE']:
-            test_loader = None
-        # vpu_model.set_C(l_mean=l_mean, p_loader = dataloaders_dict['train']['PDataset'], u_loader=dataloaders_dict['train']['UDataset'])
-        print(vpu_model.validate(train_p_loader=dataloaders_dict['train']['PDataset'], 
-                                 train_u_loader=dataloaders_dict['train']['UDataset'], 
-                                 val_p_loader=dataloaders_dict['val']['PDataset'], 
-                                 val_u_loader=dataloaders_dict['val']['UDataset'], epoch=epoch, phi_loss=avg_phi_loss, 
-                                 var_loss=avg_var_loss, reg_loss=avg_reg_loss, test_loader=test_loader))
 
+        scores_dict['train'] = vpu_model.train_one_epoch(config=base_config,
+                                                                             opt_phi=opt_phi,
+                                                                             p_loader=dataloaders_dict['train']['PDataset'],
+                                                                             u_loader=dataloaders_dict['train']['UDataset'])
+        # variational loss is the overall loss
+        avg_var_loss = scores_dict['train']['overall_loss']
+        
+        avg_phi_loss = scores_dict['train']['phi_loss']
+        avg_reg_loss = scores_dict['train']['reg_loss']
+
+        all_scores_dict['train']['epochs'].append(epoch)
+
+        if base_config['dataset_kind'] in ['LPU', 'MPE']:
+            test_loader = None
+        scores_dict['val'] = vpu_model.validate(train_p_loader=dataloaders_dict['train']['PDataset'],
+                                                train_u_loader=dataloaders_dict['train']['UDataset'],
+                                                val_p_loader=dataloaders_dict['val']['PDataset'],
+                                                val_u_loader=dataloaders_dict['val']['UDataset'], epoch=epoch, train_phi_loss=avg_phi_loss,
+                                                var_loss=avg_var_loss, train_reg_loss=avg_reg_loss, test_loader=test_loader)
+        all_scores_dict['val']['epochs'].append(epoch)
+
+        for split in ['train', 'val']:
+            for score_type, score_value in scores_dict[split].items():
+                if score_type not in all_scores_dict[split]:
+                    all_scores_dict[split][score_type] = []
+                all_scores_dict[split][score_type].append(score_value)
+
+        LOG.info(f"Epoch {epoch}: {scores_dict}")
+        # Update best validation loss and epoch
+        if scores_dict['val']['overall_loss'] < best_val_loss:
+            best_val_loss = scores_dict['val']['overall_loss']
+            best_epoch = epoch
+            best_scores_dict = copy.deepcopy(scores_dict)
+
+    # Evaluate on the test set after training
+    scores_dict['test'] = vpu_model.validate(train_p_loader=dataloaders_dict['train']['PDataset'],
+                                             train_u_loader=dataloaders_dict['train']['UDataset'],
+                                             val_p_loader=dataloaders_dict['test']['PDataset'],
+                                             val_u_loader=dataloaders_dict['test']['UDataset'], epoch=epoch, train_phi_loss=None,
+                                             var_loss=None, train_reg_loss=None, test_loader=test_loader)
+
+
+    # Flatten scores_dict
+    flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+    filtered_scores_dict = {}
+    for key, value in flattened_scores.items():
+        if 'train' in key or 'val' in key or 'test' in key:
+            if 'epochs' not in key:
+                filtered_scores_dict[key] = value
+    print("Reporting Metrics: ", filtered_scores_dict)  # Debug print to check keys
+
+    # Report metrics if executed under Ray Tune
+    if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+        ray.train.report(filtered_scores_dict)
+    else:
+        return all_scores_dict, best_epoch
 
 if __name__ == "__main__":
     import warnings
     warnings.simplefilter("error", category=UserWarning)
-    main()
-
+    results, best_epoch = train_model()
+    lpu.utils.plot_utils.plot_scores(results, loss_type='overall_loss', best_epoch=best_epoch)

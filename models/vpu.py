@@ -116,23 +116,36 @@ class VPU(lpu.models.lpu_model_base.LPUModelBase):
         total_var_loss = 0
         total_reg_loss = 0
         loader_length = 1
-        for batch_idx, (unlabled_tuple, positive_tuple) in enumerate(zip(u_loader, p_loader)):
+
+        # Initialize variables to store concatenated data and targets
+        train_data_all = None
+        train_target_all = None
+        f_x_all = None
+
+        for batch_idx, (unlabeled_tuple, positive_tuple) in enumerate(zip(u_loader, p_loader)):
             if self.config['dataset_kind'] in ['LPU', 'MPE']:
-                _, data_u, _, _ = unlabled_tuple
+                _, data_u, _, u_true_target = unlabeled_tuple
                 _, data_p, _ = positive_tuple
             else:
-                data_u, _ = unlabled_tuple
+                data_u, u_true_target = unlabeled_tuple
                 data_p, _ = positive_tuple
-            if torch.cuda.is_available():
-                data_p, data_u = data_p.cuda(), data_u.cuda()
-            # calculate the variational loss
-            data_all = torch.cat((data_p, data_u))
-            data_all = data_all.to(lpu.constants.DTYPE)
 
+            data_all = torch.concat((data_p, data_u))
+            data_all = data_all.to(self.config['device']).to(lpu.constants.DTYPE)
             output_phi_all = self.model(data_all)
             log_phi_all = output_phi_all[:, 1]
             idu_p = slice(0, len(data_p))
             idu_u = slice(len(data_p), len(data_all))
+
+            if self.config['data_generating_process'] == 'SB':
+                y = torch.cat((torch.zeros(len(data_p)), u_true_target))
+                l = torch.cat((torch.zeros(len(data_p)), torch.ones(len(data_u))))
+                f_x = log_phi_all
+            else:
+                y = u_true_target
+                l = torch.zeros(len(data_u))
+                f_x = log_phi_all[idu_u]
+
             log_phi_u = log_phi_all[idu_u]
             log_phi_p = log_phi_all[idu_p]
             output_phi_u = output_phi_all[idu_u]
@@ -146,7 +159,6 @@ class VPU(lpu.models.lpu_model_base.LPUModelBase):
             data_p_perm, target_p_perm = data_p[rand_perm], target_p[rand_perm]
             m = torch.distributions.beta.Beta(config['mix_alpha'], config['mix_alpha'])
             lam = m.sample()
-            # breakpoint()
             data = lam * data_u + (1 - lam) * data_p_perm
             target = lam * target_u + (1 - lam) * target_p_perm
             if torch.cuda.is_available():
@@ -158,23 +170,41 @@ class VPU(lpu.models.lpu_model_base.LPUModelBase):
             total_reg_loss += reg_mix_log.item()
             # calculate gradients and update the network
             phi_loss = var_loss + config['lam'] * reg_mix_log
-            total_phi_loss += phi_loss
-            total_var_loss += var_loss
+            total_phi_loss += phi_loss.item()
+            total_var_loss += var_loss.item()
             opt_phi.zero_grad()
             phi_loss.backward()
             opt_phi.step()
             loader_length += 1
-            # update the utilities for analysis of the model
-            # reg_avg.update(reg_mix_log.item())
-            # phi_loss_avg.update(phi_loss.item())
-            # var_loss_avg.update(var_loss.item())
-            # phi_p, phi_u = log_phi_p.exp(), log_phi_u.exp()
-            # phi_p_avg.update(phi_p.mean().item(), len(phi_p))
-            # phi_u_avg.update(phi_u.mean().item(), len(phi_u))
 
-        return total_phi_loss / loader_length, total_var_loss / loader_length, total_reg_loss / loader_length
+            # Concatenate data and targets
+            if train_data_all is None:
+                train_data_all = data_all
+                y_all = y
+                l_all = l
+                f_x_all = f_x
+            else:
+                train_data_all = torch.cat((train_data_all, data_all))
+                y_all = torch.cat((y_all, y))
+                l_all = torch.cat((l_all, l))
+                f_x_all = torch.cat((f_x_all, f_x))
+        # inverting labels since MPE loaders have inverse labeling, i.e. 0 for positive and 1 for negative
+        y_all = 1 - y_all
+        # Calculate scores on concatenated data
+        train_data_all = train_data_all.to(lpu.constants.DTYPE)
+        train_y_probs = torch.exp(f_x_all).detach().cpu().numpy()
+        train_l_probs = np.random.uniform(0, 1, len(train_y_probs))
+        train_l_ests = (train_l_probs > 0.5).astype(int)
+        train_y_ests = (train_y_probs > 0.5).astype(int)
+        train_results = super()._calculate_validation_metrics(
+                y_probs=train_y_probs, y_vals=y_all, l_probs=train_l_probs, l_vals=l_all, l_ests=train_l_ests, y_ests=train_y_ests)
+        train_results.update({'overall_loss': total_var_loss / loader_length})
+        train_results.update({'phi_loss': total_phi_loss / loader_length})
+        train_results.update({'reg_loss': total_reg_loss / loader_length})
+        return train_results
+
                        
-    def validate(self, train_p_loader, train_u_loader, val_p_loader, val_u_loader, epoch, phi_loss, var_loss, reg_loss, test_loader=None):
+    def validate(self, train_p_loader, train_u_loader, val_p_loader, val_u_loader, epoch, train_phi_loss, var_loss, train_reg_loss, test_loader=None):
         
         self.model.eval()
 
@@ -183,70 +213,60 @@ class VPU(lpu.models.lpu_model_base.LPUModelBase):
 
         
         # max_phi is needed for normalization
-        log_max_phi = -math.inf
-        for idx, (p_tuple, u_tuple) in enumerate(zip(train_p_loader, train_u_loader)):
+        train_log_max_phi = -math.inf
+        for idx, (train_p_tuple, train_u_tuple) in enumerate(zip(train_p_loader, train_u_loader)):
             if self.config['dataset_kind'] in ['LPU', 'MPE']:
-                _, data_u, _, _ = u_tuple
+                _, train_data_u, _, _ = train_u_tuple
             else:
-                data_p, _ = p_tuple
-                data_u, _ = u_tuple
-            data = data_u
+                train_data_p, _ = train_p_tuple
+                train_data_u, _ = train_u_tuple
+            train_data = train_data_u
             # this line is about the 
-            data = data.to(lpu.constants.DTYPE)
+            train_data = train_data.to(lpu.constants.DTYPE)
             if torch.cuda.is_available():
-                data = data.cuda()
-            log_max_phi = max(log_max_phi, self.model(data)[:, 1].max())
-
-        for idx, (u_tuple, p_tuple) in enumerate(zip(val_u_loader, val_p_loader)):
+                train_data = train_data.cuda()
+            train_log_max_phi = max(train_log_max_phi, self.model(train_data)[:, 1].max())
+        
+        for idx, (val_u_tuple, val_p_tuple) in enumerate(zip(val_u_loader, val_p_loader)):
             if self.config['dataset_kind'] in ['LPU', 'MPE']:
-                _, data_u, _, u_true_target = u_tuple
-                _, data_p, _ = p_tuple
+                _, val_data_u, _, val_u_true_target = val_u_tuple
+                _, val_data_p, _ = val_p_tuple
             else:
-                data_u, u_true_target = u_tuple
-            data = data_u
+                val_data_u, val_u_true_target = val_u_tuple
+            if self.config['data_generating_process'] == 'SB':
+                val_data = torch.cat((val_data_p, val_data_u))
+                y_val = torch.cat((torch.zeros(len(val_data_p)), val_u_true_target))
+            else:
+                val_data = val_data_u
+                y_val = val_u_true_target
             # inverting labels since MPE loaders have inverse labeling, i.e. 0 for positive and 1 for negative
-            target = 1 - u_true_target
+            y_val = 1 - y_val
             if torch.cuda.is_available():
-                data, target = data.cuda(), target.cuda()
-            data = data.to(lpu.constants.DTYPE)
-            log_phi = self.model(data)[:, 1]
-            log_phi -= log_max_phi
+                val_data = val_data.cuda()
+                y_val = y_val.cuda()
+            val_data = val_data.to(lpu.constants.DTYPE)
+            val_log_phi = self.model(val_data)[:, 1]
+            val_log_phi -= train_log_max_phi
             if idx == 0:
-                log_phi_all = log_phi
-                target_all = target
-                l_vals_all = np.concatenate([np.ones(len(data_p)), np.zeros(len(data_u))])
+                val_log_phi_all = val_log_phi
+                y_all_vall = y_val
+                val_l_vals_all = np.concatenate([np.ones(len(val_data_p)), np.zeros(len(val_data_u))])
             else:
-                log_phi_all = torch.cat((log_phi_all, log_phi))
-                target_all = torch.cat((target_all, target))
-                l_vals_all = np.concatenate([l_vals_all, np.concatenate([np.ones(len(data_p)), np.zeros(len(data_u))])])
+                val_log_phi_all = torch.cat(val_log_phi_all, val_log_phi)
+                y_all_vall = torch.cat((y_all_vall, y_val))
+                val_l_vals_all = np.concatenate([val_l_vals_all, np.concatenate([np.ones(len(val_data_p)), np.zeros(len(val_data_u))])])
 
-        if test_loader:
-            # feed test set to the model and calculate accuracy and AUC
-            with torch.no_grad():
-                for idx, (data, target) in enumerate(test_loader):
-                    if torch.cuda.is_available():
-                        data, target = data.cuda(), target.cuda()
-                    data = data.to(lpu.constants.DTYPE)
-                    log_phi = self.model(data)[:, 1]
-                    log_phi -= log_max_phi
-                    if idx == 0:
-                        log_phi_all = log_phi
-                        target_all = target
-                    else:
-                        log_phi_all = torch.cat((log_phi_all, log_phi))
-                        target_all = torch.cat((target_all, target))
-        y_probs = torch.exp(log_phi_all).detach().cpu().numpy()
-        y_vals = target_all.cpu().numpy()
-        l_vals = np.random.randint(0, 2, len(y_vals))
-        l_probs = np.random.uniform(0, 1, len(y_vals))
-        l_ests = (l_probs > l_vals.mean()).astype(int)
-        y_ests = (y_probs > 0.5).astype(int)
+        val_y_probs = torch.exp(val_log_phi_all).detach().cpu().numpy()
+        y_all_vall = y_all_vall.cpu().numpy()
+        val_l_vals = np.random.randint(0, 2, len(y_all_vall))
+        val_l_probs = np.random.uniform(0, 1, len(y_all_vall))
+        val_l_ests = (val_l_probs > val_l_vals.mean()).astype(int)
+        val_y_ests = (val_y_probs > 0.5).astype(int)
         validation_results = super()._calculate_validation_metrics(
-                y_probs, y_vals, l_probs, l_vals, l_ests=l_ests, y_ests=y_ests)
-        validation_results.update({'val overall_loss': val_var})
-        validation_results.update({'train phi_loss': phi_loss})
-        validation_results.update({'train var_loss': var_loss})
-        validation_results.update({'train reg_loss': reg_loss})
+                y_probs=val_y_probs,y_vals=y_all_vall, l_probs=val_l_probs, l_vals=val_l_vals, l_ests=val_l_ests, y_ests=val_y_ests)
+        validation_results.update({'overall_loss': val_var})
+        # validation_results.update({'phi_loss': val_phi})
+        # validation_results.update({'reg_loss': train_reg_loss})
         validation_results.update({'l_accuracy': np.nan, 
                                     'l_precision': np.nan, 
                                     'l_auc': np.nan, 
@@ -256,34 +276,8 @@ class VPU(lpu.models.lpu_model_base.LPUModelBase):
                                     'l_ll': np.nan})
         return validation_results
 
-
-
-    # def predict_prob_y_given_u(self, X):
-    #     self.model.eval()
-    #     log_max_phi = -math.inf
-    #     return np.exp(max(log_max_phi, self.model(X)[:, 1].max()))
     
             
     def predict_prob_l_given_y_u(self, X):
         return self.C
         
-    # def set_C(self, l_mean, p_loader, u_loader):
-    #     log_max_phi = -np.inf
-    #     for idx, (p_tuple, u_tuple) in enumerate(zip(p_loader, u_loader)):
-    #         if self.config['dataset_kind'] in ['LPU', 'MPE']:
-    #             _, data_p, _ = p_tuple
-    #             _, data_u, _, _ = u_tuple
-    #         else:
-    #             data_p, _ = p_tuple
-    #             data_u, _ = u_tuple
-    #         if self.config['data_generating_process'] == 'SB':
-    #             data = torch.cat((data_p, data_u))
-    #         elif self.config['data_generating_process'] == 'CC':
-    #             data = data_u
-    #         else:
-    #             raise ValueError('data_generating_process must be one of "SB" or "CC"')
-    #         if torch.cuda.is_available():
-    #             data = data.cuda()
-    #         log_max_phi = max(log_max_phi, self.model(data)[:, 1].max())
-    #     self.alpha = torch.exp(log_max_phi).mean().detach().cpu().numpy()
-    #     self.C = l_mean * self.alpha

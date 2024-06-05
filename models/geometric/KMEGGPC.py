@@ -4,8 +4,9 @@ import numpy as np
 
 import lpu.external_libs.SAR_PU.lib.km.km.Kernel_MPE_grad_threshold
 import lpu.models.geometric.elkanGGPC
+import lpu.utils.utils_general
 
-LOG = logging.getLogger(__name__)
+LOG = lpu.utils.utils_general.configure_logger(__name__)
 
 EPSILON = 1e-16
 

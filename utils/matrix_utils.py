@@ -129,7 +129,7 @@ class ModifiedKernel(gpytorch.kernels.Kernel):
         # self.M_outputscale = NormalPrior(10., 0.1)
         self.M_outputscale = torch.tensor(self.intrinsic_kernel_params['amplitude'], dtype=constants.DTYPE)#torch.nn.Parameter(torch.zeros(1))# NormalPrior(0.2, .01)
         # self.M_outputscale = torch.nn.Parameter(torch.zeros(1)-1)
-        self.D = D
+        # self.D = D
 
         # self.register_buffer("D", D)
         # self.register_buffer("M", M)
@@ -154,28 +154,29 @@ class ModifiedKernel(gpytorch.kernels.Kernel):
         length = torch.tensor(1., dtype=constants.DTYPE)
         K_x1_x2 = self.main_kernel(x1, x2) / length 
 
-        K_D_x1 = self.main_kernel(self.D, x1) / length 
-        K_D_x2 = self.main_kernel(self.D, x2) / length 
+        K_X_x1 = self.main_kernel(self.X, x1) / length 
+        K_X_x2 = self.main_kernel(self.X, x2) / length 
 
-
-        D_tilde = find_closest_differentiable(self.D, self.X)
-        # print ("D_TILDE NAN", torch.isnan(D_tilde).any())
-        W = manifold_utils.build_W_torch(D_tilde, k_neighbours=self.intrinsic_kernel_params['n_neighbor'], lengthscale=self.intrinsic_kernel_params['lengthscale'], connectivity=self.intrinsic_kernel_params['neighbor_mode'])
-        # W.register_hook(lambda grad: print("Gradient of W:", torch.isnan(grad).any()))
+        ############################################################################################################
+        # implementation where we penalize distances between the inducing points and the data points
+        ############################################################################################################
+        # as part of regulariziation beside smoothness with respect to the manifold
+        # D_tilde = find_closest_differentiable(self.D, self.X)
+        # W = manifold_utils.build_W_torch(D_tilde, k_neighbours=self.intrinsic_kernel_params['n_neighbor'], lengthscale=self.intrinsic_kernel_params['lengthscale'], connectivity=self.intrinsic_kernel_params['neighbor_mode'])
+        # self.M, _= manifold_utils.build_manifold_mat(W, self.intrinsic_kernel_params)
+        # self.M += torch.diag(torch.linalg.norm(self.D - D_tilde, dim=1) ** 2)
+        W = manifold_utils.build_W_torch(self.X, k_neighbours=self.intrinsic_kernel_params['n_neighbor'], lengthscale=self.intrinsic_kernel_params['lengthscale'], connectivity=self.intrinsic_kernel_params['neighbor_mode'])
         self.M, _= manifold_utils.build_manifold_mat(W, self.intrinsic_kernel_params)
-        self.M += torch.diag(torch.linalg.norm(self.D - D_tilde, dim=1) ** 2)
-        # print ("SHAPE:", distances.shape)
-        # self.M.register_hook(lambda grad: print("Gradient of M:", torch.isnan(grad).any()))
-        
-        self.K_DD=self.main_kernel(self.D, self.D).evaluate().detach()
+
+        self.K_XX = self.main_kernel(self.X, self.X).evaluate().detach()
         if self.intrinsic_kernel_params['invert_M_first']:
             self.M_inv = invert_psd_matrix_torch(self.M)
             self.M = self.M * self.M_outputscale ** 2
             self.M_inv = self.M / self.M_outputscale ** 2
-            self.M_inv_plus_K_DD__inv = invert_psd_matrix_torch(self.M_inv / self.M_outputscale ** 2 + self.K_DD)
+            self.M_inv_plus_K_XX__inv = invert_psd_matrix_torch(self.M_inv / self.M_outputscale ** 2 + self.K_XX)
         else:
             self.M = self.M * self.M_outputscale ** 2
-            self.M_inv_plus_K_DD__inv = torch.linalg.solve(torch.eye(self.M.size(0), device=self.M.device) + torch.matmul(self.M, self.K_DD), self.M)
+            self.M_inv_plus_K_XX__inv = torch.linalg.solve(torch.eye(self.M.size(0), device=self.M.device) + torch.matmul(self.M, self.K_XX), self.M)
             # print ("M_inv_plus_K_DD__inv?", torch.isnan(self.M_inv_plus_K_DD__inv).any())
     
         # self.M_inv_plus_K_DD__inv.register_hook(lambda grad: print("Gradient of M_inv_plus_K_DD__inv:", torch.isnan(grad).any()))
@@ -188,7 +189,7 @@ class ModifiedKernel(gpytorch.kernels.Kernel):
         #     self.K_DD = self.K_DD.expand(expand_size)
         #     self.M_inv_plus_K_DD__inv = self.M_inv_plus_K_DD__inv.expand(expand_size)
         # Ensure correct batch matrix multiplication
-        modified_term = torch.matmul(torch.matmul(K_D_x1.transpose(-2, -1), self.M_inv_plus_K_DD__inv), K_D_x2)
+        modified_term = torch.matmul(torch.matmul(K_X_x1.transpose(-2, -1), self.M_inv_plus_K_XX__inv), K_X_x2)
         # modified_term.register_hook(lambda grad: print("Gradient of modified_term:", torch.isnan(grad).any()))
 
         output = K_x1_x2 - modified_term 

@@ -35,25 +35,23 @@ class ElkanGGPC(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
         self.config = config
         super().__init__(config=self.config, **kwargs)
 
-    def predict_proba(self, X):
-        self.gp_model.eval()
-        self.likelihood.eval()
-        with torch.no_grad():
+    def predict_proba(self, X=None, f_x=None):
+        if not f_x:
             self.gp_model.update_input_data(X)
-            self.gp_model(X)
-            l_prob = torch.sigmoid(self.gp_model(X).rsample(sample_shape=torch.Size([1000]))).mean(dim=0)
+            f_x = self.gp_model(X)
+        l_prob = torch.sigmoid(f_x.rsample(sample_shape=torch.Size([1000]))).mean(dim=0)
         return l_prob 
 
-    def predict_prob_y_given_X(self, X):
-        return self.predict_proba(X) / self.C
+    def predict_prob_y_given_X(self, X=None, f_x=None):
+        return self.predict_proba(X=X, f_x=f_x) / self.C
     
-    def predict_prob_l_given_y_X(self, X):
+    def predict_prob_l_given_y_X(self, X=None, f_x=None):
         return self.C 
 
     def set_C(self, holdout_dataloader):
         C_vals = []
         for holdout_X, holdout_l, _, _ in holdout_dataloader:
-            C_vals.append(self.predict_proba(holdout_X[holdout_l==1]))
+            C_vals.append(self.predict_proba(holdout_X[holdout_l==1]).detach().cpu().numpy())
         C_vals = np.hstack(C_vals)
         self.C = np.mean(C_vals, axis=0)
     

@@ -1,4 +1,5 @@
 import logging
+import numpy as np
 import warnings
 
 import gpytorch
@@ -20,33 +21,13 @@ import lpu.models.lpu_model_base
 import lpu.models.geometric.psychmGGPC
 import lpu.utils.dataset_utils
 import lpu.models.geometric.GVGP
+import lpu.utils.utils_general  
 
 # Set up logging configuration
 # logging.basicConfig(level=logging.INFO)  # Set the logging level as per your requirement
 
 # Create a logger instance
-LOG = logging.getLogger(__name__)
-
-# INDUCING_POINTS_SIZE = 64
-# LEARNINIG_RATE = 0.01
-# NUM_EPOCHS = 100
-# DEVICE = 'cpu'
-# EPOCH_BLOCKS = 1
-# TRAIN_VAL_RATIO = None
-
-# INTRINSIC_KERNEL_PARAMS = {
-#     'normed': False,
-#     'kernel_type': 'laplacian',
-#     'heat_temp': .01,
-#     'noise_factor': 0., 
-#     'amplitude': 0.5, 
-#     'n_neighbor': 5,
-#     'lengthscale':  0.3,
-#     'neighbor_mode': 'distance',
-#     'power_factor': 1,
-#     'invert_M_first': False 
-# }
-    
+LOG = lpu.utils.utils_general.configure_logger(__name__)
  
 
 class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase): 
@@ -83,8 +64,8 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
             ################################################################################################            
             # setting the mean and variance for the variational distribution for the psychometric function
             ################################################################################################            
-            print ("True alpha: ", true_alpha)
-            print ("True beta: ", true_beta)    
+            LOG.info(f"True alpha: {true_alpha}")
+            LOG.info(f"True beta: {true_beta}")
             self.variational_mean_alpha = torch.nn.Parameter(torch.zeros(num_features, dtype=lpu.constants.DTYPE))# + true_alpha)
             # Parameter for the log of the diagonal elements to ensure they are positive
             self.log_diag = torch.nn.Parameter(torch.randn(num_features, dtype=lpu.constants.DTYPE))
@@ -309,27 +290,78 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
     #     else:
     #         return mean.cpu().numpy()
 
-    def predict_prob_l_given_y_X(self, X):
-        self.gp_model.eval()
-        self.likelihood.eval()
-        self.gp_model.update_input_data(X)
-        with torch.no_grad():
-            output  = self.gp_model(X)
-            self.likelihood.update_input_data(X)
-            self.likelihood(output)
-            gamma, lambda_, _ = torch.softmax(torch.tensor([self.likelihood.gamma_mean, self.likelihood.lambda_mean, 0.]), dim=0)
-            linear_response = X @ self.likelihood.variational_mean_alpha + self.likelihood.variational_mean_beta
-            output = (gamma + (1-gamma - lambda_) * torch.sigmoid(linear_response)).cpu().detach().numpy()
+    def predict_prob_l_given_y_X(self, X=None):
+        gamma, lambda_, _ = torch.softmax(torch.tensor([self.likelihood.gamma_mean, self.likelihood.lambda_mean, 0.]), dim=0)
+        linear_response = X @ self.likelihood.variational_mean_alpha + self.likelihood.variational_mean_beta
+        output = (gamma + (1-gamma - lambda_) * torch.sigmoid(linear_response)).cpu().detach().numpy()
         return output
         # return self.likelihood.probs.mean(axis=0).cpu().detach().numpy()
 
-    def predict_prob_y_given_X(self, X):
-        self.gp_model.eval()
-        self.likelihood.eval()
-        self.gp_model.update_input_data(X)
-        with torch.no_grad():
-            y_prob = torch.nn.functional.sigmoid(self.gp_model(X).rsample(sample_shape=torch.Size([100]))).mean(axis=0).cpu().detach().numpy()
+    def predict_prob_y_given_X(self, X=None, f_x=None):
+        if f_x is None:
+            self.gp_model.update_input_data(X)
+            f_x = self.gp_model(X)
+        y_prob = torch.nn.functional.sigmoid(f_x.rsample(sample_shape=torch.Size([100]))).mean(axis=0).cpu().detach().numpy()
         return y_prob
     
 
-    
+    def validate(self, dataloader, loss_fn=None):
+        scores_dict = {}
+        total_loss = 0.
+        l_batch_concat = []
+        y_batch_concat = []
+        y_batch_concat_prob = []
+        l_batch_concat_prob = []
+        l_batch_concat_est = []
+        y_batch_concat_est = []
+        self.gp_model.eval()
+        self.likelihood.eval()
+        binary_kind = set(torch.unique(dataloader.dataset.y))
+        with torch.no_grad():
+            for batch_num, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
+                self.gp_model.update_input_data(X_batch)
+                self.likelihood.update_input_data(X_batch)
+                f_x = self.gp_model(X_batch)
+                self.likelihood(f_x)
+                loss = loss_fn(f_x, l_batch)
+                y_batch_prob = self.predict_prob_y_given_X(f_x=f_x)
+                l_batch_prob = self.predict_proba(X=X_batch, f_x=f_x)
+                y_batch_est = self.predict_y_given_X(f_x=f_x)
+                l_batch_est = self.predict(X=X_batch, f_x=f_x)
+                
+                if isinstance(y_batch_prob, np.ndarray):
+                    y_batch_prob = torch.tensor(y_batch_prob, dtype=lpu.constants.DTYPE)
+                    l_batch_prob = torch.tensor(l_batch_prob, dtype=lpu.constants.DTYPE)
+                    y_batch_est = torch.tensor(y_batch_est, dtype=lpu.constants.DTYPE)
+                    l_batch_est = torch.tensor(l_batch_est, dtype=lpu.constants.DTYPE)
+
+
+                total_loss += loss.item()
+
+                l_batch_concat.append(l_batch.detach().cpu().numpy())
+                y_batch_concat.append(y_batch.detach().cpu().numpy())
+                y_batch_concat_prob.append(y_batch_prob.detach().cpu().numpy())
+                l_batch_concat_prob.append(l_batch_prob.detach().cpu().numpy())
+                y_batch_concat_est.append(y_batch_est.detach().cpu().numpy())
+                l_batch_concat_est.append(l_batch_est.detach().cpu().numpy())   
+
+        y_batch_concat_prob = np.concatenate(y_batch_concat_prob)
+        l_batch_concat_prob = np.concatenate(l_batch_concat_prob)
+        y_batch_concat_est = np.concatenate(y_batch_concat_est)
+        l_batch_concat_est = np.concatenate(l_batch_concat_est)
+        y_batch_concat = np.concatenate(y_batch_concat)
+        l_batch_concat = np.concatenate(l_batch_concat)
+
+        if binary_kind == {-1, 1}:
+            y_batch_concat = (y_batch_concat + 1) / 2
+            l_batch_concat = (l_batch_concat + 1) / 2
+        scores_dict = self._calculate_validation_metrics(
+            y_batch_concat_prob, y_batch_concat, l_batch_concat_prob, l_batch_concat, l_ests=l_batch_concat_est, y_ests=y_batch_concat_est
+        )
+
+        # for score_type in scores_dict:
+        #     scores_dict[score_type] = np.mean(scores_dict[score_type])
+        total_loss /= (batch_num + 1)
+        scores_dict['overall_loss'] = total_loss
+
+        return scores_dict        

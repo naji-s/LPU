@@ -1,211 +1,392 @@
+
 import copy
-import logging
-import os
+import random
+
 import sys
-import types 
-
-import lpu.external_libs.Self_PU.datasets
-import lpu.external_libs.Self_PU.models
-
-sys.path.append('lpu/external_libs/self_PU')
-import numpy as np
-import torch.backends.cudnn
-import torch.utils.data
-import torch
-import unittest.mock
-
-import lpu.external_libs
+sys.path.append('lpu/external_libs/PU_learning')
+sys.path.append('lpu/external_libs/PU_learning/data_helper')
+sys.path.append('lpu/models/selfPU/selfPU')
 import lpu.external_libs.Self_PU
-import lpu.external_libs.Self_PU.train
+import lpu.external_libs.Self_PU.cifar_datasets
+import lpu.external_libs.Self_PU.datasets
+import lpu.external_libs.Self_PU.functions
+import lpu.external_libs.Self_PU.mean_teacher
+import lpu.external_libs.Self_PU.mean_teacher.losses
+import lpu.external_libs.Self_PU.meta_models
+import lpu.external_libs.Self_PU.models
 import lpu.external_libs.Self_PU.utils
-import lpu.models.selfPU
+import lpu.external_libs.Self_PU.utils.util
+
+import torchvision
+import torch.backends.cudnn
+
+import lpu.models.selfPU.selfPU
+import lpu.models.selfPU.dataset_utils
 
 
-LOG = logging.getLogger(__name__)
-
-# import torch.optim
+from matplotlib import pyplot as plt
+import torch.nn
+import torch.utils.data
+import numpy as np
 
 import lpu.constants
+import lpu.utils.dataset_utils
 import lpu.datasets.LPUDataset
-import lpu.datasets.dataset_utils
+import lpu.models.mpe_model
+import lpu.utils.plot_utils
 import lpu.utils.utils_general
-import lpu.external_libs.Self_PU.functions
 
-LEARNING_RATE = 0.01
-INDUCING_POINTS_SIZE = 32
-TRAIN_VAL_RATIO = .1
-HOLD_OUT_SIZE = None
-TRAIN_TEST_RATIO = .5
+import sklearn.model_selection
 
-def create_model(ema=False, dim=4096):
-    model = lpu.external_libs.Self_PU.models.MultiLayerPerceptron(dim)
-    if ema:
-        for param in model.parameters():
-            param.detach_()
-    return model
+LOG = lpu.utils.utils_general.configure_logger(__name__)
 
-global single_epoch_steps
-def main():
-    yaml_file_path = '/Users/naji/phd_codebase/lpu/configs/selfPU_config.yaml'
-    config = lpu.utils.utils_general.load_and_process_config(yaml_file_path)
-    lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal', normalize=False, invert_l=False)
-    train_loader, test_loader, val_loader, holdout_loader = lpu.datasets.dataset_utils.create_stratified_splits(lpu_dataset, train_val_ratio=TRAIN_VAL_RATIO, batch_size=len(lpu_dataset), hold_out_size=HOLD_OUT_SIZE, train_test_ratio=TRAIN_TEST_RATIO)
-    # passing X to initialize_inducing_points to extract the initial values of inducing points
-    # nnPU_model = lpu.models.nnPU.nnPU(config)
-    args = types.SimpleNamespace(**config)
+# Optional dynamic import for Ray
+try:
+    import ray.util.client
+    import ray.train
+    RAY_AVAILABLE = True
+except ImportError:
+    LOG.warning("Ray is not available. Please install Ray to enable distributed training.")
+    RAY_AVAILABLE = False
 
-    num_workers = config.get('num_workers', 4)
-    batch_size = config.get('batch_size', 32)
-    num_epochs = config.get('num_epochs', 200)
-    learning_rate = config.get('learning_rate', 5e-4)
-    replacement = config.get('replacement', True)
-    self_paced_type = config.get('self_paced_type', False)
-    top = config.get('top', 0.5)
-    seed = config.get('seed', None)
-    increasing = config.get('increasing', True)
-    device = config.get('device', 'cpu')
-    global single_epoch_steps
-    single_epoch_steps = 0
+DEFAULT_CONFIG = {
+    # "dataset_name": "animal_no_animal",
+    "ratios": {
+        # *** NOTE ***
+        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+        "test": 0.25,
+        "val": 0.2,
+        "holdout": 0.05,
+        "train": 0.5
+    },
+    "batch_size": {
+        "train": 64,
+        "test": 64,
+        "val": 64,
+        "holdout": 64
+    },
+    # "batch_size": {
+    #     "train": 8192,
+    #     "test": 8192,
+    #     "val": 8192,
+    #     "holdout": 8192
+    # },
+    "dataset_kind": "LPU",
+    "dataset_name": "animal_no_animal",
+    "dim": 4096,
+    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
+    "device": "cpu",
+    "lr": 0.01,
+    "momentum": 0.9,
+    "weight_decay": 0.005,
+    "modeldir": "lpu/scripts/selfPU/checkpoints/",
+    "epochs": 100,
+    "loss": "nnPU",
+    "gpu": None,
+    "workers": 0,
+    "weight": 1.0,
+    "self_paced": True,
+    "self_paced_start": 10,
+    "self_paced_stop": 50,
+    "self_paced_frequency": 10,
+    "self_paced_type": "A",
+    "increasing": True,
+    "replacement": True,
+    "mean_teacher": True,
+    "ema_start": 50,
+    "ema_decay": 0.999,
+    "consistency": 0.3,
+    "consistency_rampup": 400,
+    "top1": 0.4,
+    "top2": 0.6,
+    "soft_label": False,
+    "datapath": "./data",
+    "type": "mu",
+    "alpha": 0.1,
+    "gamma": 0.0625,
+    "num_p": 1000
 
-    selfPU_model = lpu.models.selfPU.selfPU(config)
-    selfPU_model.set_C(train_loader)
-    # with (unittest.mock.patch('lpu.external_libs.Self_PU.train.args', args),  unittest.mock.patch.object(torch.Tensor, 'cuda', lambda x: x.to(device)),
-            # unittest.mock.patch.object(torch.Tensor, 'float', lambda x: x.to(lpu.constants.DTYPE))): 
-    val_loader_copy = copy.deepcopy(val_loader) 
-    with unittest.mock.patch('lpu.external_libs.Self_PU.train.args', args):
-        criterion = lpu.external_libs.Self_PU.train.get_criterion()
-    consistency_criterion = lpu.external_libs.Self_PU.train.losses.softmax_mse_loss
-    if device in ['cuda', 'gpu']:
-        torch.cuda.set_device(0)
-        torch.backends.cudnn.benchmark = True
-    trainX, trainL, trainY = next(iter(train_loader))
-    testX, testL, testY = next(iter(test_loader))
-    valX, valL, valY = next(iter(val_loader))
+}
 
-    with unittest.mock.patch.object(np, 'float32', lpu.constants.NUMPY_DTYPE):
-        dataset_train_clean = lpu.models.selfPU.selfPUModifiedDataset(trainX, trainY, trainL, valX, valY, valL, split='train',ids=[],
-            increasing=increasing, replacement=replacement, mode=self_paced_type, top = top, type="clean", seed = seed)
 
-        dataset_train_noisy = lpu.models.selfPU.selfPUModifiedDataset(trainX, trainY, trainL, valX, valY, valL, split='train', 
-            increasing=increasing, replacement=replacement, mode=self_paced_type, top = top, type="noisy", seed = seed)
 
-        dataset_train_noisy.copy(dataset_train_clean) # 和clean dataset使用相同的随机顺序
-        dataset_train_noisy.reset_ids() # 让初始化的noisy dataset使用全部数据
+def get_criterion(config):
+    weights = [float(config['weight']), 1.0]
+    class_weights = torch.FloatTensor(weights)
 
-    dataset_train_noisy.copy(dataset_train_clean) # 和clean dataset使用相同的随机顺序
-    dataset_train_noisy.reset_ids() # 让初始化的noisy dataset使用全部数据
+    class_weights = class_weights.to(config['device'])
+    if config['loss'] == 'Xent':
+        criterion = lpu.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49, loss_fn="Xent")
+    elif config['loss'] == 'nnPU':
+        criterion = lpu.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49)
+    elif config['loss'] == 'Focal':
+        class_weights = torch.FloatTensor(weights).to(config['device'])
+        criterion = lpu.external_libs.Self_PU.utils.util.FocalLoss(gamma=0, weight=class_weights, one_hot=False)
+    elif config['loss'] == 'uPU':
+        criterion = lpu.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49, nnPU=False)
+    elif config['loss'] == 'Xent_weighted':
+        criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 
-    with unittest.mock.patch.object(np, 'float32', lpu.constants.NUMPY_DTYPE):
-        dataset_test = lpu.models.selfPU.selfPUModifiedDataset(trainX, trainY, trainL, testX, testY, testL, split='test', 
-            increasing=increasing, replacement=replacement, mode=self_paced_type, top = top, type="clean", seed = seed)
+    return criterion
 
-        dataset_val = lpu.models.selfPU.selfPUModifiedDataset(trainX, trainY, trainL, valX, valY, valL, split='test',
-            increasing=increasing, replacement=replacement, mode=self_paced_type, top = top, type="clean", seed = seed)
+def make_transformations(dataset_name):
+    transformations = {
+        'cifar': {
+            'train': torchvision.transforms.Compose([
+                torchvision.transforms.ToPILImage(),
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]),
+            'val': torchvision.transforms.Compose([
+                torchvision.transforms.ToPILImage(),
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ])
+        },
+        'mnist': {
+            'train': torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize((0.1307,), (0.3081,)),
+                torch.flatten
+            ]),
+            'val': torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize((0.1307,), (0.3081,)),
+                torch.flatten
+            ]),
+        },
+        'animal_no_animal':
+        {
+            'train': lambda x: x,
+            'val': lambda x: x
+        }
+        
+    }
 
-    if len(dataset_train_clean) > 0:
-        dataloader_train_clean = torch.utils.data.DataLoader(dataset_train_clean, batch_size=batch_size, num_workers=num_workers, shuffle=True, pin_memory=True)
-    else:
-        dataloader_train_clean = None
+    return transformations[dataset_name]
+
+def train_model(config=None):
     
-    if len(dataset_train_noisy) > 0:
-        dataloader_train_noisy = torch.utils.data.DataLoader(dataset_train_noisy, batch_size=batch_size, num_workers=num_workers, shuffle=False, pin_memory=True)
-    else:
-        dataloader_train_noisy = None
+    if config is None:
+        config = {}
+    # Load the base configuration
+    config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+
+    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
+    # torch.manual_seed(config['seed'])
+    # if config['seed'] is not None:
+    #     random.seed(config['seed'])
+    #     torch.manual_seed(config['seed'])
+    #     torch.backends.cudnn.deterministic = True
+        
+    criterion = get_criterion(config)
+    criterion_meta = lpu.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49, loss_fn="sigmoid_eps")
+
+    data_transforms = make_transformations(config['dataset_name'])
+    if config['dataset_kind'] == 'SelfPU':
+        (trainX, trainY), (testX, testY) = lpu.models.selfPU.dataset_utils.get_dataset(config['dataset_name'], path=config['datapath'])
+        # max_size = 5000
+        max_size = -1
+        trainX = trainX[:max_size]
+        trainY = trainY[:max_size]
+        testX = testX[:max_size]
+        testY = testY[:max_size]
+
+        train_val_ratio = config['ratios']['train'] / (config['ratios']['train'] + config['ratios']['val'])
+
+        trainX, valX, trainY, valY = sklearn.model_selection.train_test_split(trainX, trainY, test_size=train_val_ratio)
+        trainY, valY, testY = lpu.models.selfPU.dataset_utils.binarize_class(trainY, valY, testY, dataset_name=config['dataset_name'])
+
+        n_u_train = len(trainY)# - config['num_p']
+        n_u_val = len(valY)# - config['num_p']
+        n_u_test = len(testY)# - config['num_p']
+        
+        X_train, Y_train, T_train, oids_train, prior_train = lpu.models.selfPU.dataset_utils.make_dataset(trainX=trainX, trainY=trainY, n_labeled=config['num_p'], n_unlabeled=n_u_train)
+        X_val, Y_val, T_val, oids_val, prior_val = lpu.models.selfPU.dataset_utils.make_dataset(trainX=valX, trainY=valY, n_labeled=config['num_p'], n_unlabeled=n_u_val)
+        X_test, Y_test, T_test, oids_test, prior_test = lpu.models.selfPU.dataset_utils.make_dataset(trainX=testX, trainY=testY, n_labeled=config['num_p'], n_unlabeled=n_u_test)
+    elif config['dataset_kind'] == 'LPU':
+        dataloaders_dict = lpu.utils.dataset_utils.create_dataloaders_dict(config, target_transform=lpu.utils.dataset_utils.one_zero_to_minus_one_one,
+                                                                       label_transform=lpu.utils.dataset_utils.one_zero_to_minus_one_one)
+        
+        X_train = dataloaders_dict['train'].dataset.X.detach().cpu().numpy()
+        T_train = dataloaders_dict['train'].dataset.y.detach().cpu().numpy()
+        Y_train = dataloaders_dict['train'].dataset.l.detach().cpu().numpy()
+        oids_train = np.arange(len(Y_train))
+        prior_train = Y_train.mean()
+
+        X_val = dataloaders_dict['val'].dataset.X.detach().cpu().numpy()
+        T_val = dataloaders_dict['val'].dataset.y.detach().cpu().numpy()
+        Y_val = dataloaders_dict['val'].dataset.l.detach().cpu().numpy()
+        oids_val = np.arange(len(Y_val))
+        prior_val = Y_val.mean()
+
+        X_test = dataloaders_dict['test'].dataset.X.detach().cpu().numpy()
+        T_test = dataloaders_dict['test'].dataset.y.detach().cpu().numpy()
+        Y_test = dataloaders_dict['test'].dataset.l.detach().cpu().numpy()
+        oids_test = np.arange(len(Y_test))
+        prior_test = Y_test.mean()
+
     
-    if len(dataset_val):
-        dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=batch_size, num_workers=0, shuffle=False, pin_memory=True)
-    else:
-        dataloader_val = None
 
-    assert np.all(dataset_train_noisy.X == dataset_train_clean.X)
-    assert np.all(dataset_train_noisy.Y == dataset_train_clean.Y)
-    assert np.all(dataset_train_noisy.oids == dataset_train_clean.oids)
-    assert np.all(dataset_train_noisy.T == dataset_train_clean.T)
+    dataset_train1_clean = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+        X=X_train, Y=Y_train, T=T_train, oids=oids_train, prior=prior_train, ids=[], increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], top = config['top1'], transform = data_transforms['train'], type="clean")
 
-    dim = torch.flatten(torch.tensor(dataset_train_clean.X), start_dim=1).shape[-1]
-    selfPU_model.model = create_model(dim=dim)
-    selfPU_model.ema_model = create_model(ema = True, dim=dim)
-    params_list = [{'params': selfPU_model.model.parameters()}] 
-    optimizer = torch.optim.Adam(params_list, lr=args.lr,
-       weight_decay=args.weight_decay
-    ) 
-    model_dir = config.get('model_dir', 'lpu/scripts/selfPU')
-    stats_ = lpu.external_libs.Self_PU.functions.stats(model_dir, 0)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, num_epochs, eta_min = learning_rate * 0.2)
-    #scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40, 80], gamma=0.6)
+    dataset_train1_noisy = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+        X=X_train, Y=Y_train, T=T_train, oids=oids_train, prior=prior_train,
+        increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], top = config['top1'], transform = data_transforms['train'], type="noisy")
+
+    dataset_train1_noisy.copy(dataset_train1_clean) # 和clean dataset使用相同的随机顺序
+    dataset_train1_noisy.reset_ids() # 让初始化的noisy dataset使用全部数据
+
+    dataset_test = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+        X=X_test, Y=Y_test, T=T_test, oids=oids_test, prior=prior_test,
+        increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], transform = data_transforms['val'], type="clean")
+
+    dataset_val = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+        X=X_val, Y=Y_val, T=T_val, oids=oids_val, prior=prior_val,
+        increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], transform = data_transforms['val'], type="clean")
+    dataset_train2_noisy = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+        X=X_train, Y=Y_train, T=T_train, oids=oids_train, prior=prior_train,
+        increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], 
+        transform = data_transforms['train'], top = config['top2'], type="noisy")
+    dataset_train2_clean = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+        X=X_train, Y=Y_train, T=T_train, oids=oids_train, prior=prior_train,
+        increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], 
+        transform = data_transforms['train'], top = config['top2'], type="clean", ids=[])
+    
+    dataset_train2_noisy.copy(dataset_train1_noisy)
+    dataset_train2_noisy.reset_ids()
+    dataset_train2_clean.copy(dataset_train1_clean)
+
+    assert np.all(dataset_train1_clean.X == dataset_train1_noisy.X)
+    assert np.all(dataset_train2_clean.X == dataset_train1_noisy.X)
+    assert np.all(dataset_train2_noisy.X == dataset_train1_noisy.X)
+
+    assert np.all(dataset_train1_clean.Y == dataset_train1_noisy.Y)
+    assert np.all(dataset_train2_clean.Y == dataset_train1_noisy.Y)
+    assert np.all(dataset_train2_noisy.Y == dataset_train1_noisy.Y)
+
+    assert np.all(dataset_train1_clean.T == dataset_train1_noisy.T)
+    assert np.all(dataset_train2_clean.T == dataset_train1_noisy.T)
+    assert np.all(dataset_train2_noisy.T == dataset_train1_noisy.T)
+
+    criterion.update_p(0.4)
+    dataloader_train1_clean = None
+    dataloader_train1_noisy = torch.utils.data.DataLoader(dataset_train1_noisy, batch_size=config['batch_size']['train'], num_workers=config['workers'], shuffle=False, pin_memory=True)
+    dataloader_train2_clean = None
+    dataloader_train2_noisy = torch.utils.data.DataLoader(dataset_train2_noisy, batch_size=config['batch_size']['train'], num_workers=config['workers'], shuffle=False, pin_memory=True)
+    dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=config['batch_size']['val'], shuffle=False, pin_memory=True)
+    dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=config['batch_size']['test'], shuffle=False, pin_memory=True)
+    consistency_criterion = lpu.external_libs.Self_PU.mean_teacher.losses.softmax_mse_loss
+    selfPU_model = lpu.models.selfPU.selfPU.selfPU(config=config)
+
+    selfPU_model.model1 = selfPU_model.create_model().to(config['device'])
+    selfPU_model.model2 = selfPU_model.create_model().to(config['device'])
+    selfPU_model.ema_model1 = selfPU_model.create_model(ema = True).to(config['device'])
+    selfPU_model.ema_model2 = selfPU_model.create_model(ema = True).to(config['device'])
+    for name, param in selfPU_model.model1.named_parameters():
+        print ("name: ", name)
+        if not param.is_leaf:
+            print(f"Parameter '{name}' is not a leaf tensor.")    
+    for param in selfPU_model.model1.parameters():
+        if not param.is_leaf:
+            print("Found a non-leaf parameter:")
+            # print(param)
+            print(f"Gradient function:) {param.grad_fn}")    
+    optimizer1 = torch.optim.Adam(selfPU_model.model1.parameters(), lr=config['lr'],
+                                  weight_decay=config['weight_decay'])
+    optimizer2 = torch.optim.Adam(selfPU_model.model2.parameters(), lr=config['lr'],
+                                  weight_decay=config['weight_decay'])
+
+    stats_ = lpu.external_libs.Self_PU.functions.stats(config['modeldir'], 0)
+    #scheduler1 = torch.optim.lr_scheduler.MultiStepLR(optimizer1, milestones=[15, 60], gamma=0.7)
+    #scheduler2 = torch.optim.lr_scheduler.MultiStepLR(optimizer2, milestones=[15, 60], gamma=0.7)
+    scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer1, config['epochs'])
+    scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer2, config['epochs'])
+
+    best_acc1 = 0
+    best_acc2 = 0
+    best_acc3 = 0
+    best_acc4 = 0
     best_acc = 0
+    best_val_loss = float('inf')
+    best_epoch = -1
+    scores_dict = {}
+    all_scores_dict = {split: {'epochs': []} for split in ['train', 'val']}
 
-    single_epoch_steps = len(dataloader_train_noisy) + 1
-    if device in ['cuda', 'gpu']:
-        selfPU_model.model = selfPU_model.model.cuda()
-        selfPU_model.ema_model = selfPU_model.ema_model.cuda()
-
-
-    val = []
-    for epoch in range(num_epochs):
-        # with (unittest.mock.patch('lpu.external_libs.Self_PU.train.args', args), unittest.mock.patch.object(torch.Tensor, 'cuda', lambda x: x.to(device)),
-        #       unittest.mock.patch.object(torch.Tensor, 'float', lambda x: x.to(lpu.constants.DTYPE))): 
-        with unittest.mock.patch('lpu.external_libs.Self_PU.train.args', args):
-            print("Self paced status: {}".format(lpu.external_libs.Self_PU.train.check_self_paced(epoch)))
-            print("Mean teacher status: {}".format(lpu.external_libs.Self_PU.train.check_mean_teacher(epoch)))
-            print("Noisy status: {}".format(lpu.external_libs.Self_PU.train.check_noisy(epoch)))
-
-            if lpu.external_libs.Self_PU.train.check_mean_teacher(epoch) and (not lpu.external_libs.Self_PU.train.check_mean_teacher(epoch - 1)) and not switched:
-                selfPU_model.model.eval()
-                selfPU_model.ema_model.eval()
-                selfPU_model.ema_model.load_state_dict(selfPU_model.model.state_dict())
-                switched = True
-                print("SWITCHED!")
-                lpu.external_libs.Self_PU.train.validate(dataloader_val, selfPU_model.model, selfPU_model.ema_model, criterion, consistency_criterion, epoch)
-                lpu.external_libs.Self_PU.train.validate(dataloader_val, selfPU_model.ema_model, selfPU_model.model, criterion, consistency_criterion, epoch)
-                selfPU_model.model.train()
-                selfPU_model.ema_model.train()
-            if epoch == 0:
-                switched = False
-
-            if (not lpu.external_libs.Self_PU.train.check_mean_teacher(epoch)) and lpu.external_libs.Self_PU.train.check_mean_teacher(epoch - 1) and not switched:
-                selfPU_model.model.eval()
-                selfPU_model.ema_model.eval()
-                selfPU_model.model.load_state_dict(selfPU_model.ema_model.state_dict())
-                switched = True
-                print("SWITCHED!")
-                lpu.external_libs.Self_PU.train.validate(dataloader_val, selfPU_model.model, selfPU_model.ema_model, criterion, consistency_criterion, epoch)
-                lpu.external_libs.Self_PU.train.validate(dataloader_val, selfPU_model.ema_model, selfPU_model.model, criterion, consistency_criterion, epoch)
-                selfPU_model.model.train()
-                selfPU_model.ema_model.train()
-            trainPacc, trainNacc, trainPNacc = lpu.external_libs.Self_PU.train.train(dataloader_train_clean, dataloader_train_noisy, selfPU_model.model, selfPU_model.ema_model, criterion, consistency_criterion, optimizer, scheduler, epoch, self_paced_pick=len(dataset_train_clean))
-            valPacc, valNacc, valPNacc = lpu.external_libs.Self_PU.train.validate(dataloader_val, selfPU_model.model, selfPU_model.ema_model, criterion, consistency_criterion, epoch)
+    for epoch in range(config['epochs']):
+        print("Self paced status: {}".format(selfPU_model.check_self_paced(epoch)))
+        print("Mean Teacher status: {}".format(selfPU_model.check_mean_teacher(epoch)))
+        if selfPU_model.check_mean_teacher(epoch) and not selfPU_model.check_mean_teacher(epoch - 1) and not selfPU_model.switched:
+            selfPU_model.ema_model1.load_state_dict(selfPU_model.model1.state_dict())
+            selfPU_model.ema_model2.load_state_dict(selfPU_model.model2.state_dict())
+            selfPU_model.switched = True
+            LOG.info("Switched to Mean Teacher")
+        if not selfPU_model.check_self_paced(epoch):
+            scores_dict['train'] = selfPU_model.train(dataloader_train1_clean, dataloader_train1_noisy, dataloader_train2_clean, dataloader_train2_noisy, selfPU_model.model1, selfPU_model.model2, selfPU_model.ema_model1, selfPU_model.ema_model2, criterion, consistency_criterion, optimizer1, scheduler1, optimizer2, scheduler2, epoch)
+            scores_dict['train']['self_paced'] = True
+        else:
+            scores_dict['train'] = selfPU_model.train_with_meta(dataloader_train1_clean, dataloader_train1_noisy, dataloader_train2_clean, dataloader_train2_noisy, dataloader_val,selfPU_model.model1, selfPU_model.model2, selfPU_model.ema_model1, selfPU_model.ema_model2, criterion_meta, consistency_criterion, optimizer1, scheduler1, optimizer2, scheduler2, epoch)
+            scores_dict['train']['self_paced'] = False
+        all_scores_dict['train']['epochs'].append(epoch)
             
-        val.append(valPNacc)
-        #validate_2(dataloader_test, selfPU_model.model, selfPU_model.ema_model, criterion, consistency_criterion, epoch)
-        stats_._update(trainPacc, trainNacc, trainPNacc, valPacc, valNacc, valPNacc)
+        scores_dict['val'] = selfPU_model.validate(dataloader_val, loss_fn=criterion, model=selfPU_model.model1)
+        all_scores_dict['val']['epochs'].append(epoch)
+        for split in ['train', 'val']:
+            for score_type, score_value in scores_dict[split].items():
+                if score_type not in all_scores_dict[split]:
+                    all_scores_dict[split][score_type] = []
+                all_scores_dict[split][score_type].append(score_value)
+        LOG.info(f"Epoch {epoch}: {scores_dict}")
+        
+        # models = [model1, model2, ema_model1, ema_model2]
 
-        is_best = valPNacc > best_acc
-        best_acc = max(valPNacc, best_acc)
-        filename = []
-        filename.append(os.path.join(model_dir, 'checkpoint.pth.tar'))
-        filename.append(os.path.join(model_dir, 'model_best.pth.tar'))
-        with unittest.mock.patch('lpu.external_libs.Self_PU.train.args', args):
-            if (lpu.external_libs.Self_PU.train.check_self_paced(epoch)) and (epoch - args.self_paced_start) % args.self_paced_frequency == 0:
+        if (selfPU_model.check_self_paced(epoch)) and (epoch - config['self_paced_start']) % config['self_paced_frequency'] == 0:
 
-                dataloader_train_clean, dataloader_train_noisy = lpu.external_libs.Self_PU.train.update_dataset(selfPU_model.model, selfPU_model.ema_model, dataset_train_clean, dataset_train_noisy, epoch)
+            dataloader_train1_clean, dataloader_train1_noisy, dataloader_train2_clean, dataloader_train2_noisy = selfPU_model.update_dataset(selfPU_model.model1, selfPU_model.model2, selfPU_model.ema_model1, selfPU_model.ema_model2, dataset_train1_clean, dataset_train1_noisy, dataset_train2_clean, dataset_train2_noisy, epoch, )
 
-        lpu.external_libs.Self_PU.functions.plot_curve(stats_, model_dir, 'selfPU_model.model', True)
-        lpu.external_libs.Self_PU.train.save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': selfPU_model.model.state_dict(),
-            'best_prec1': best_acc,
-            'optimizer' : optimizer.state_dict(),
-        }, is_best, filename)
-        dataset_train_noisy.shuffle()
+        # lpu.external_libs.Self_PU.functions.plot_curve(stats_, config['modeldir'], 'model', True)
 
-        #dataloader_train_clean = DataLoader(dataset_train_clean, batch_size=args.batch_size, num_workers=args.workers, shuffle=True, pin_memory=True)
-        dataloader_train_noisy = torch.utils.data.DataLoader(dataset_train_noisy, batch_size=batch_size, num_workers=num_workers, shuffle=False, pin_memory=True)
-        dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=batch_size, num_workers=0, shuffle=False, pin_memory=True)
-        print(selfPU_model.validate(val_loader_copy))
-    print(best_acc)
-    print(val)
+        dataset_train1_noisy.shuffle()
+        dataset_train2_noisy.shuffle()
+        dataloader_train1_noisy = torch.utils.data.DataLoader(dataset_train1_noisy, batch_size=config['batch_size']['train'], num_workers=config['workers'], shuffle=False, pin_memory=True)
+        dataloader_train2_noisy = torch.utils.data.DataLoader(dataset_train2_noisy, batch_size=config['batch_size']['train'], num_workers=config['workers'], shuffle=False, pin_memory=True)
+
+        # Update best validation loss and epoch
+        if scores_dict['val']['overall_loss'] < best_val_loss:
+            best_val_loss = scores_dict['val']['overall_loss']
+            best_epoch = epoch
+            # best_scores_dict = copy.deepcopy(scores_dict)
+
+    scores_dict['test'] = selfPU_model.validate(dataloader_test, loss_fn=criterion, model=selfPU_model.model1)
+
+    # Flatten scores_dict
+    flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+    filtered_scores_dict = {}
+    for key, value in flattened_scores.items():
+        if 'train' in key or 'val' in key or 'test' in key:
+            if 'epochs' not in key:
+                filtered_scores_dict[key] = value
+
+    print("Reporting Metrics: ", filtered_scores_dict)  # Debug print to check keys
+    LOG.info(f"Final test error: {scores_dict['test']}")
+
+    # Report metrics if executed under Ray Tune
+    if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+        ray.train.report(filtered_scores_dict)
+    else:
+        return all_scores_dict, best_epoch
+
+    # return scores_dict, best_epoch
+    # print("Test Accuracy: {}".format(testPNacc1))
+    # print(best_acc1)
+    # print(best_acc2)
+    # print(best_acc3)
+    # print(best_acc4)    
 
 if __name__ == "__main__":
-    main()
-
+    import warnings
+    warnings.simplefilter("error", category=UserWarning)
+    results, best_epoch = train_model()
+    lpu.utils.plot_utils.plot_scores(results, best_epoch=best_epoch)

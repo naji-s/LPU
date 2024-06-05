@@ -1,8 +1,7 @@
-lr: 0.001
+lr: 0.0005
 num_epochs: 200
+epochs: 5
 device: cpu
-dtype: constants.DTYPE
-train_val_ratio: .1
 evaluation_interval: 1
 epoch_blocks: 1
 kde_mode: logit
@@ -12,23 +11,24 @@ consistency: 0.3
 weight: 1.0
 gpu: null
 loss: nnPU
-dataset: mnist
-mean_teacher: false
+dataset_name: animal_no_animal
+mean_teacher: true
 self_paced_type: A
-soft_label: false
+soft_label: true
 seed: 1 
-batch_size: 64
 momentum: 0.9
 weight_decay: 0.005
 log_path: logs/
 modeldir: lpu/external_libs/Self_PU/checkpoints
 task_name: temp
-epochs: 200
 num_workers: 0
+workers: 0
+type: mu
+
 ema_start: 50
 ema_decay: 0.999
 consistency_rampup: 400
-self_paced: false
+self_paced: true
 self_paced_start: 10
 self_paced_stop: 50 
 self_paced_frequency: 10
@@ -36,3 +36,26 @@ increasing: true
 replacement: true
 evaluation: false 
 top: 0.5
+num_labeled: 1000
+dataset_kind: LPU
+data_generating_process: SB
+# datapath: data/BinarizedMNISTData
+ratios: 
+  # *** NOTE ***
+  # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+  # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+  test: 0.1 
+  val: 0.1
+  holdout: .01 
+  train: .79
+
+
+batch_size: 
+  train: 256
+  test: 256
+  val: 256
+  holdout: null
+
+top1: 0.4
+top2: 0.6
+num_p: 1000

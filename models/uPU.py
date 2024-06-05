@@ -18,12 +18,192 @@ import lpu.constants
 import lpu.external_libs
 import lpu.models.geometric.elkanGGPC
 import lpu.models.lpu_model_base
-import lpu.external_libs.nnPUSB.nnPU_loss
+import lpu.models.uPU
 
 
 LOG = logging.getLogger(__name__)
 
 EPSILON = 1e-16
+
+import numpy as np
+import torch
+from torch import nn
+import torch.nn.functional
+
+
+class MyClassifier(torch.nn.Module):
+
+    def zero_one_loss(self, h, t, is_logistic=False):
+        self.eval()
+        positive = 1
+        negative = 0 if is_logistic else -1
+
+        n_p = (t == positive).sum()
+        n_n = (t == negative).sum()
+        size = n_p + n_n
+
+        t_p = ((h == positive) * (t == positive)).sum()
+        t_n = ((h == negative) * (t == negative)).sum()
+        f_p = n_n - t_n
+        f_n = n_p - t_p
+
+        # print("size:{0},t_p:{1},t_n:{2},f_p:{3},f_n:{4}".format(
+        #     size, t_p, t_n, f_p, f_n))
+
+        presicion = (0.0 if t_p == 0 else t_p/(t_p+f_p))
+        recall = (0.0 if t_p == 0 else t_p/(t_p+f_n))
+
+        return presicion, recall, 1 - (t_p+t_n)/size
+
+    def error(self, DataLoader, is_logistic=False, device='cpu'):
+        presicion = []
+        recall = []
+        error_rate = []
+        self.eval()
+        for data, target in DataLoader:
+            data = data.to(device, non_blocking=True)
+            t = target.detach().cpu().numpy()
+            size = len(t)
+            if is_logistic:
+                h = np.reshape(torch.sigmoid(
+                    self(data)).detach().cpu().numpy(), size)
+                h = np.where(h > 0.5, 1, 0).astype(np.int32)
+            else:
+                h = np.reshape(torch.sign(
+                    self(data)).detach().cpu().numpy(), size)
+
+            result = self.zero_one_loss(h, t, is_logistic)
+            presicion.append(result[0])
+            recall.append(result[1])
+            error_rate.append(result[2])
+
+        return sum(presicion)/len(presicion), sum(recall)/len(recall), sum(error_rate)/len(error_rate)
+
+
+class ThreeLayerPerceptron(MyClassifier, nn.Module):
+    def __init__(self, dim):
+        super(ThreeLayerPerceptron, self).__init__()
+
+        self.input_dim = dim
+        self.l1 = nn.Linear(dim, 100)
+        self.l2 = nn.Linear(100, 1)
+
+        self.af = torch.nn.functional.relu
+
+    def forward(self, x):
+        x = x.view(-1, self.input_dim)
+        x = self.l1(x)
+        x = self.af(x)
+        x = self.l2(x)
+        return x
+
+
+class MultiLayerPerceptron(MyClassifier, nn.Module):
+    def __init__(self, dim):
+        super(MultiLayerPerceptron, self).__init__()
+
+        self.input_dim = dim
+
+        self.l1 = nn.Linear(dim, 300, bias=False)
+        self.b1 = nn.BatchNorm1d(300)
+        self.l2 = nn.Linear(300, 300, bias=False)
+        self.b2 = nn.BatchNorm1d(300)
+        self.l3 = nn.Linear(300, 300, bias=False)
+        self.b3 = nn.BatchNorm1d(300)
+        self.l4 = nn.Linear(300, 300, bias=False)
+        self.b4 = nn.BatchNorm1d(300)
+        self.l5 = nn.Linear(300, 1)
+        self.af = torch.nn.functional.relu
+
+    def forward(self, x):
+        x = x.view(-1, self.input_dim)
+        h = self.l1(x)
+        h = self.b1(h)
+        h = self.af(h)
+        h = self.l2(h)
+        h = self.b2(h)
+        h = self.af(h)
+        h = self.l3(h)
+        h = self.b3(h)
+        h = self.af(h)
+        h = self.l4(h)
+        h = self.b4(h)
+        h = self.af(h)
+        h = self.l5(h)
+        return h
+
+
+class CNN(MyClassifier, nn.Module):
+    def __init__(self, dim):
+        super(CNN, self).__init__()
+
+        self.af = torch.nn.functional.relu
+        self.input_dim = dim
+
+        self.conv1 = nn.Conv2d(3, 96, 3, padding=1)
+        self.conv2 = nn.Conv2d(96, 96, 3, padding=1)
+        self.conv3 = nn.Conv2d(96, 96, 3, padding=1, stride=2)
+        self.conv4 = nn.Conv2d(96, 192, 3, padding=1)
+        self.conv5 = nn.Conv2d(192, 192, 3, padding=1)
+        self.conv6 = nn.Conv2d(192, 192, 3, padding=1, stride=2)
+        self.conv7 = nn.Conv2d(192, 192, 3, padding=1)
+        self.conv8 = nn.Conv2d(192, 192, 1)
+        self.conv9 = nn.Conv2d(192, 10, 1)
+        self.b1 = nn.BatchNorm2d(96)
+        self.b2 = nn.BatchNorm2d(96)
+        self.b3 = nn.BatchNorm2d(96)
+        self.b4 = nn.BatchNorm2d(192)
+        self.b5 = nn.BatchNorm2d(192)
+        self.b6 = nn.BatchNorm2d(192)
+        self.b7 = nn.BatchNorm2d(192)
+        self.b8 = nn.BatchNorm2d(192)
+        self.b9 = nn.BatchNorm2d(10)
+        self.fc1 = nn.Linear(640, 1000)
+        self.fc2 = nn.Linear(1000, 1000)
+        self.fc3 = nn.Linear(1000, 1)
+
+    def forward(self, x):
+        h = self.conv1(x)
+        h = self.b1(h)
+        h = self.af(h)
+        h = self.conv2(h)
+        h = self.b2(h)
+        h = self.af(h)
+        h = self.conv3(h)
+        h = self.b3(h)
+        h = self.af(h)
+        h = self.conv4(h)
+        h = self.b4(h)
+        h = self.af(h)
+        h = self.conv5(h)
+        h = self.b5(h)
+        h = self.af(h)
+        h = self.conv6(h)
+        h = self.b6(h)
+        h = self.af(h)
+        h = self.conv7(h)
+        h = self.b7(h)
+        h = self.af(h)
+        h = self.conv8(h)
+        h = self.b8(h)
+        h = self.af(h)
+        h = self.conv9(h)
+        h = self.b9(h)
+        h = self.af(h)
+
+        h = h.view(h.size(0), -1)
+        h = self.fc1(h)
+        h = self.af(h)
+        h = self.fc2(h)
+        h = self.af(h)
+        h = self.fc3(h)
+        return h
+    
+def select_loss(loss_name):
+    losses = {
+        "sigmoid": lambda x: torch.sigmoid(-x)}
+    return losses[loss_name]
+
 
 class uPUloss(torch.nn.Module):
     """Loss function for PU learning."""
@@ -36,7 +216,7 @@ class uPUloss(torch.nn.Module):
         self.prior = prior
         self.gamma = gamma
         self.beta = beta
-        self.loss_func = loss
+        self.loss_fn = loss
         self.positive = 1
         self.unlabeled = -1
 
@@ -48,8 +228,8 @@ class uPUloss(torch.nn.Module):
         ), (t == self.unlabeled).float()
         n_positive, n_unlabeled = max(1., positive.sum().item()), max(
             1., unlabeled.sum().item())
-        y_positive = self.loss_func(x)
-        y_unlabeled = self.loss_func(-x)
+        y_positive = self.loss_fn(x)
+        y_unlabeled = self.loss_fn(-x)
 # ?        breakpoint()
         positive_risk = torch.sum(
             self.prior * positive / n_positive * y_positive)
@@ -71,14 +251,13 @@ class uPU(lpu.models.lpu_model_base.LPUModelBase):
 
     def select_model(self):
         models = {
-            "3lp": lpu.external_libs.nnPUSB.model.ThreeLayerPerceptron,
-            "mlp": lpu.external_libs.nnPUSB.model.MultiLayerPerceptron, 
-            "cnn": lpu.external_libs.nnPUSB.model.CNN
+            "3mlp": ThreeLayerPerceptron,
+            "mlp": MultiLayerPerceptron, 
+            "cnn": CNN
         }
-        self.model = models[self.config['model']](self.dim)
+        self.model = models[self.config['model']](self.dim).to(lpu.constants.DTYPE)
     
     def set_C(self, holdout_dataloader):
-        assert len(holdout_dataloader) == 1
         _, holdout_l, holdout_y, _ = next(iter(holdout_dataloader))
         self.C = holdout_l[holdout_y == 1.].mean().detach().cpu().numpy()
         is_positive = holdout_y==1
@@ -87,78 +266,133 @@ class uPU(lpu.models.lpu_model_base.LPUModelBase):
                     "the method needds it")
 
 
-    def train_one_epoch(self, dataloader, loss_func=None, optimizer=None, device=None):
+    def train_one_epoch(self, dataloader, loss_fn=None, optimizer=None, device=None):
         self.model.train()
         scores_dict = {}
-        for i, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
-            X_batch = X_batch.to(device, non_blocking=True)
-            l_batch = l_batch.to(device, non_blocking=True)
-            y_batch = y_batch.to(device, non_blocking=True)
-            # breakpoint()
-            if self.config['data_generating_process'] == 'CC':
-                X_batch_concat = torch.concat([X_batch, X_batch[l_batch==1]], dim=0)
-                l_batch_concat = torch.concat([torch.zeros_like(l_batch), torch.ones((int(l_batch.sum().detach().cpu().numpy().squeeze())))], dim=0)
-                y_batch_concat = torch.concat([y_batch, y_batch[l_batch==1]], dim=0)
-            else:
-                X_batch_concat = X_batch
-                l_batch_concat = l_batch
-                y_batch_concat = y_batch
+        overal_loss = 0
+        l_batch_concat = []
+        y_batch_concat = []
+        y_batch_concat_prob = []
+        l_batch_concat_prob = []
+        l_batch_concat_est = []
+        y_batch_concat_est = []
+
+        binary_kind = set(np.unique(dataloader.dataset.y))
+        for batch_num, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
+            X_batch = X_batch.to(device)
+            l_batch = l_batch.to(device)
+            y_batch = y_batch.to(device)
+            
+            # if self.config['data_generating_process'] == 'CC':
+            #     X_batch = torch.concat([X_batch, X_batch[l_batch==1]], dim=0)
+            #     y_batch = torch.concat([y_batch, y_batch[l_batch==1]], dim=0)
+            #     l_batch = torch.concat([torch.zeros_like(l_batch), torch.ones((int(l_batch.sum().detach().cpu().numpy().squeeze())))], dim=0)
+
+            f_x = self.model(X_batch)   
+
+            ########################################################################
+            # calculating score-related values
+            ########################################################################
+
+            detached_f_x = f_x.clone().detach().cpu()
+            y_batch_prob = self.predict_prob_y_given_X(f_x=detached_f_x)
+            l_batch_prob = self.predict_proba(f_x=detached_f_x)
+            y_batch_est = self.predict_y_given_X(f_x=detached_f_x)
+            l_batch_est = self.predict(f_x=detached_f_x)
+
+            if isinstance(y_batch_prob, np.ndarray):
+                y_batch_prob = torch.tensor(y_batch_prob, dtype=lpu.constants.DTYPE)
+                l_batch_prob = torch.tensor(l_batch_prob, dtype=lpu.constants.DTYPE)
+                y_batch_est = torch.tensor(y_batch_est, dtype=lpu.constants.DTYPE)
+                l_batch_est = torch.tensor(l_batch_est, dtype=lpu.constants.DTYPE)
+
+
+
+            y_batch_concat.append(y_batch)
+            y_batch_concat_prob.append(y_batch_prob)
+            y_batch_concat_est.append(y_batch_est)
+
+            l_batch_concat_prob.append(l_batch_prob)
+            l_batch_concat.append(l_batch)
+            l_batch_concat_est.append(l_batch_est)
+
+            ########################################################################
+            # calculating loss & backpropagation
+            ########################################################################
 
             optimizer.zero_grad()            
-            output = self.model(X_batch_concat)             
-            loss = loss_func(output, l_batch_concat * 2 - 1)  
+            # calculating the loss only for the current batch
+            loss = loss_fn(f_x, l_batch)
             loss.backward()
             optimizer.step()
+            overal_loss += loss.item()
+            
+        y_batch_concat_prob = np.concatenate(y_batch_concat_prob)
+        l_batch_concat_prob = np.concatenate(l_batch_concat_prob)
+        y_batch_concat_est = np.concatenate(y_batch_concat_est)
+        l_batch_concat_est = np.concatenate(l_batch_concat_est)
+        y_batch_concat = np.concatenate(y_batch_concat)
+        l_batch_concat = np.concatenate(l_batch_concat)
+        if binary_kind == {-1, 1}:
+            l_batch_concat = (l_batch_concat + 1) // 2
+            y_batch_concat = (y_batch_concat + 1) // 2
+        scores_dict = self._calculate_validation_metrics(
+            y_batch_concat_prob, y_batch_concat, l_batch_concat_prob, l_batch_concat, l_ests=l_batch_concat_est, y_ests=y_batch_concat_est
+        )
 
-            batch_scores = self.calculate_probs_and_scores(X_batch_concat, l_batch_concat, y_batch_concat)
-            for score_type, score_value in batch_scores.items():
-                if score_type not in scores_dict:
-                    scores_dict[score_type] = []
-                scores_dict[score_type].append(score_value)
-
-        self.model.eval()
-        for score_type in scores_dict:
-            scores_dict[score_type] = np.mean(scores_dict[score_type])
-
+        # average loss
+        scores_dict['overall_loss'] = overal_loss / (batch_num + 1)
         return scores_dict
 
-    def predict_prob_y_given_X(self, X):
+
+
+    def predict_prob_y_given_X(self, X=None, f_x=None):
+        if f_x is None:
+            f_x = self.model(X)
+        return torch.sigmoid(f_x)
+
+
+
+    def predict_y_given_X(self, X=None, f_x=None, threshold=0.5):
+        """
+        Predicts the class label given. 
+
+        Args:
+            X (np.ndarray): input data
+            f_x (np.ndarray): raw output of the model (which is the unnormalized y=1|X)
+
+        Returns:
+            np.ndarray: predicted class labels
+        """
         self.model.eval()
-        # getting raw output
-        size = len(X)
-        f_x = np.reshape(self.model(X).detach().cpu().numpy(), size)
-        density_ratio = f_x / self.prior
-        # ascending sort
-        sorted_density_ratio = np.sort(density_ratio)
-        size = len(density_ratio)
+        LOG.debug("Implementation is not based on probabilities, different from usual"
+                  "deal with models inheritting from LPUModelBase")
+        if X is not None and f_x is not None:
+            raise ValueError("Only one of X and scores should be provided")
+        if X is not None:
+            f_x = self.model(X)
+        return self.predict_prob_y_given_X(f_x=f_x) > threshold
 
-        n_pi = int(size * self.prior)
-        threshold = (
-            sorted_density_ratio[size - n_pi] + sorted_density_ratio[size - n_pi - 1]) / 2
-                
-        return scipy.special.expit(f_x - threshold)
 
+    
     def predict_prob_l_given_y_X(self, X):
         self.model.eval()
         return self.C
     
-    def predict_proba(self, X):
+    def predict_proba(self, X=None, f_x=None):
         self.model.eval()
-        return self.predict_prob_y_given_X(X) * self.C
+        if X is not None and f_x is not None:
+            raise ValueError("Only one of X and scores should be provided")
+        if X is not None:
+            f_x = self.model(X)
+        return self.predict_prob_y_given_X(f_x=f_x) * self.C
     
-    def predict_y_given_X(self, X):
-        self.model.eval()
-        LOG.debug("Implementation is not based on probabilities, different from usual"
-                  "deal with models inheritting from LPUModelBase")
-        size = len(X)
-
-        # getting raw output
-        raw = np.reshape(self.model(X).detach().cpu().numpy(), size)
-
-        # predict with density ratio and threshold
-        h = self.model.predict_with_density_threshold(raw, target=None, prior=self.prior)
-        return (h + 1) // 2
     
-    def predict(self, X):
+    def predict(self, X=None, f_x=None, threshold=0.5):
         self.model.eval()
-        return self.predict_y_given_X(X) > 0.5
+        if X is not None and f_x is not None:
+            raise ValueError("Only one of X and scores should be provided")
+        if X is not None:
+            f_x = self.model(X).detach().cpu().numpy()
+        return self.predict_proba(f_x=f_x) > threshold
+
