@@ -3,9 +3,9 @@ import logging
 import numpy as np
 import sklearn.svm
 
-import lpu.constants
-import lpu.external_libs.SAR_PU.sarpu.sarpu.pu_learning
-import lpu.models.lpu_model_base
+import LPU.constants
+import LPU.external_libs.SAR_PU.sarpu.sarpu.pu_learning
+import LPU.models.lpu_model_base
 
 LOG = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class BasePU:
     # to avoid division by zero
 
     def _make_propensity_weighted_data(x,s,e,sample_weight=None):
-        e = e + lpu.constants.EPSILON
+        e = e + LPU.constants.EPSILON
         weights_pos = s/e
         weights_neg = (1-s) + s*(1-1/e)
         if sample_weight is not None:
@@ -71,7 +71,7 @@ class SVMPU(sklearn.svm.SVC, BasePU):
 
 
 
-class SARPU(lpu.models.lpu_model_base.LPUModelBase):
+class SARPU(LPU.models.lpu_model_base.LPUModelBase):
     """
     Using estimator of p(s|X) to predict p(y|X)
     """
@@ -108,7 +108,7 @@ class SARPU(lpu.models.lpu_model_base.LPUModelBase):
         binary_kind = set(np.unique(y))
 
         propensity_attributes = np.ones(X_batch_concat.shape[-1]).astype(int)
-        self.classification_model, self.propensity_model, self.results = lpu.external_libs.SAR_PU.sarpu.sarpu.pu_learning.pu_learn_sar_em(
+        self.classification_model, self.propensity_model, self.results = LPU.external_libs.SAR_PU.sarpu.sarpu.pu_learning.pu_learn_sar_em(
             X_batch_concat, l_batch_concat, classification_model=self.classification_model, propensity_attributes=propensity_attributes, max_its=self.max_iter)
 
         y_batch_concat_prob = self.predict_prob_y_given_X(X=X_batch_concat)
@@ -138,7 +138,7 @@ class SARPU(lpu.models.lpu_model_base.LPUModelBase):
     def loss_fn(self, X, l):
         class_probabilities = self.predict_prob_y_given_X(X)
         propensity_scores = self.predict_prob_l_given_y_X(X)
-        return lpu.external_libs.SAR_PU.sarpu.sarpu.pu_learning.loglikelihood_probs(class_probabilities, propensity_scores, l)
+        return LPU.external_libs.SAR_PU.sarpu.sarpu.pu_learning.loglikelihood_probs(class_probabilities, propensity_scores, l)
 
     def validate(self, dataloader, loss_fn=None):
         scores_dict = {}

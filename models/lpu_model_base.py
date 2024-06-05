@@ -3,10 +3,10 @@ import sklearn.base
 import sklearn.metrics
 import torch
 
-import lpu.constants
-import lpu.datasets.animal_no_animal.animal_no_animal_utils
-import lpu.utils.dataset_utils
-import lpu.utils.dataset_utils  
+import LPU.constants
+import LPU.datasets.animal_no_animal.animal_no_animal_utils
+import LPU.utils.dataset_utils
+import LPU.utils.dataset_utils  
 
 class LPUModelBase(torch.nn.Module):
     def __init__(self, **kwargs):
@@ -207,10 +207,10 @@ class LPUModelBase(torch.nn.Module):
                 l_batch_est = self.predict(f_x=f_x)
                 
                 if isinstance(y_batch_prob, np.ndarray):
-                    y_batch_prob = torch.tensor(y_batch_prob, dtype=lpu.constants.DTYPE)
-                    l_batch_prob = torch.tensor(l_batch_prob, dtype=lpu.constants.DTYPE)
-                    y_batch_est = torch.tensor(y_batch_est, dtype=lpu.constants.DTYPE)
-                    l_batch_est = torch.tensor(l_batch_est, dtype=lpu.constants.DTYPE)
+                    y_batch_prob = torch.tensor(y_batch_prob, dtype=LPU.constants.DTYPE)
+                    l_batch_prob = torch.tensor(l_batch_prob, dtype=LPU.constants.DTYPE)
+                    y_batch_est = torch.tensor(y_batch_est, dtype=LPU.constants.DTYPE)
+                    l_batch_est = torch.tensor(l_batch_est, dtype=LPU.constants.DTYPE)
 
 
                 total_loss += loss.item()

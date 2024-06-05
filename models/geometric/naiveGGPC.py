@@ -1,8 +1,8 @@
-import lpu.models.Kernel_MPE_grad_threshold
-import lpu.models.geometric.elkanGGPC
+import LPU.models.Kernel_MPE_grad_threshold
+import LPU.models.geometric.elkanGGPC
 EPSILON = 1e-16
 
-class NaiveGGPC(lpu.models.geometric.elkanGGPC.ElkanGGPC):
+class NaiveGGPC(LPU.models.geometric.elkanGGPC.ElkanGGPC):
     """
     Using estimator of p(s|X) to predict p(y|X)
     """

@@ -8,10 +8,10 @@
 # import torch.utils.data
 # import unittest.mock
 
-# import lpu.external_libs.Self_PU.functions
-# import lpu.external_libs.Self_PU.mean_teacher
-# import lpu.external_libs.Self_PU.models
-# import lpu.external_libs.Self_PU.utils
+# import LPU.external_libs.Self_PU.functions
+# import LPU.external_libs.Self_PU.mean_teacher
+# import LPU.external_libs.Self_PU.models
+# import LPU.external_libs.Self_PU.utils
 
 
 
@@ -19,16 +19,16 @@
 # import pandas as pd
 # import sklearn.model_selection
 # import torch
-# import lpu.constants
-# import lpu.external_libs
-# import lpu.models.geometric.elkanGGPC
-# import lpu.models.lpu_model_base
-# import lpu.external_libs.Self_PU.datasets
-# import lpu.external_libs.Self_PU.train
-# import lpu.external_libs.Self_PU.mean_teacher.losses
-# import lpu.external_libs.Self_PU.mean_teacher.ramps
+# import LPU.constants
+# import LPU.external_libs
+# import LPU.models.geometric.elkanGGPC
+# import LPU.models.lpu_model_base
+# import LPU.external_libs.Self_PU.datasets
+# import LPU.external_libs.Self_PU.train
+# import LPU.external_libs.Self_PU.mean_teacher.losses
+# import LPU.external_libs.Self_PU.mean_teacher.ramps
 
-# torch.set_default_dtype(lpu.constants.DTYPE)
+# torch.set_default_dtype(LPU.constants.DTYPE)
 
 # LOG = logging.getLogger(__name__)
 
@@ -489,7 +489,7 @@
         
 #     def make_PU_dataset_from_binary_dataset(x, y, l):
 #         # labels = np.unique(y)
-#         X, Y, L = np.asarray(x, dtype=lpu.constants.NUMPY_DTYPE), np.asarray(y, dtype=int), np.asarray(l, dtype=int)
+#         X, Y, L = np.asarray(x, dtype=LPU.constants.NUMPY_DTYPE), np.asarray(y, dtype=int), np.asarray(l, dtype=int)
 #         perm = np.random.permutation(len(X))
 #         X, Y, L = X[perm], Y[perm], L[perm]
 
@@ -538,9 +538,9 @@
 
 #         # super().__init__(n_labeled, n_unlabeled, trainX, trainY, testX, testY, type=type, split=split, mode=mode, ids=ids, pn=pn, increasing=increasing, replacement=replacement, top = top, flex = flex, pickout=pickout, seed = seed)
 #         # if split == "train":
-#         #     self.X, self.Y, self.T, self.oids, self.prior = lpu.external_libs.Self_PU.datasets.make_dataset(((trainX, trainY), (testX, testY)), n_labeled, n_unlabeled, mode=split, pn=pn, seed = seed)
+#         #     self.X, self.Y, self.T, self.oids, self.prior = LPU.external_libs.Self_PU.datasets.make_dataset(((trainX, trainY), (testX, testY)), n_labeled, n_unlabeled, mode=split, pn=pn, seed = seed)
 #         # elif split == "test":
-#         #     self.X, self.Y, self.T, self.oids, self.prior = lpu.external_libs.Self_PU.datasets.make_dataset(((trainX, trainY), (testX, testY)), n_labeled, n_unlabeled, mode=split, pn=pn, seed = seed)
+#         #     self.X, self.Y, self.T, self.oids, self.prior = LPU.external_libs.Self_PU.datasets.make_dataset(((trainX, trainY), (testX, testY)), n_labeled, n_unlabeled, mode=split, pn=pn, seed = seed)
 #         # else:
 #         #     raise ValueError("split should be either 'train' or 'test'")
 #         if set(np.unique(trainL)).issubset({0, 1}):
@@ -590,7 +590,7 @@
 #         self.result = -np.ones(len(trainX) + len(testX))
 
 
-# class selfPUModifiedDataset_FixSample(lpu.external_libs.Self_PU.datasets.MNIST_Dataset_FixSample):
+# class selfPUModifiedDataset_FixSample(LPU.external_libs.Self_PU.datasets.MNIST_Dataset_FixSample):
 #     def __init__(self, trainX, trainY, trainL, testX, testY, testL, type="noisy", split="train", mode=None, ids=None, pn=False, increasing=False, replacement=True, top=0.5, flex=0, pickout=True, seed=None):
 #         n_labeled = trainL.sum().to(int)
 #         n_unlabeled = len(trainL) - n_labeled
@@ -659,7 +659,7 @@
 
 
 
-# class selfPU(lpu.models.lpu_model_base.LPUModelBase):
+# class selfPU(LPU.models.lpu_model_base.LPUModelBase):
 #     """
 #     """
 #     def __init__(self, config, single_epoch_steps, *args, **kwargs):
@@ -673,7 +673,7 @@
 #         self.soft_label = config.get('soft_label', False)
 #         self.batch_size = config.get('batch_size', 32)
 #         self.num_workers = config.get('num_workers', 4)
-#         self.model_dir = config.get('model_dir', 'lpu/scripts/selfPU')
+#         self.model_dir = config.get('model_dir', 'LPU/scripts/selfPU')
 #         self.single_epoch_steps = single_epoch_steps
 #         self.step = 0 
 
@@ -723,7 +723,7 @@
 
 #     def predict_proba(self, X):
 #         self.model.eval()
-#         return torch.sigmoid(self.model(torch.as_tensor(X, dtype=lpu.constants.DTYPE))).detach().numpy().flatten()
+#         return torch.sigmoid(self.model(torch.as_tensor(X, dtype=LPU.constants.DTYPE))).detach().numpy().flatten()
 
 #     def predict_prob_y_given_X(self, X):
 #         return self.predict_proba(X) / self.C

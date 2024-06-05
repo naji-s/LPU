@@ -2,18 +2,18 @@
 import copy
 import sys
 
-# import lpu.external_libs.PU_learning.train_PU
+# import LPU.external_libs.PU_learning.train_PU
 
-# import lpu.external_libs.potentially toched versions
+# import LPU.external_libs.potentially toched versions
 
-sys.path.append('lpu/external_libs/PU_learning')
-sys.path.append('lpu/external_libs/PU_learning/data_helper')
+sys.path.append('LPU/external_libs/PU_learning')
+sys.path.append('LPU/external_libs/PU_learning/data_helper')
 
-import lpu.external_libs.PU_learning.estimator
+import LPU.external_libs.PU_learning.estimator
 
-import lpu.external_libs.PU_learning.data_helper
-import lpu.external_libs.PU_learning.helper
-import lpu.external_libs.PU_learning.utils
+import LPU.external_libs.PU_learning.data_helper
+import LPU.external_libs.PU_learning.helper
+import LPU.external_libs.PU_learning.utils
 
 from matplotlib import pyplot as plt
 import torch.nn
@@ -22,18 +22,18 @@ import torch.backends.cudnn
 import torch.utils.data
 import numpy as np
 
-import lpu.constants
-import lpu.utils.dataset_utils
-import lpu.datasets.LPUDataset
-import lpu.external_libs.PU_learning.algorithm
-# import lpu.models.mpe_model
-import lpu.utils.plot_utils
-import lpu.utils.utils_general
+import LPU.constants
+import LPU.utils.dataset_utils
+import LPU.datasets.LPUDataset
+import LPU.external_libs.PU_learning.algorithm
+# import LPU.models.mpe_model
+import LPU.utils.plot_utils
+import LPU.utils.utils_general
 import mpe_utils
 import mpe_utils_data
 
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 # Optional dynamic import for Ray
 try:
@@ -95,23 +95,23 @@ def create_dataloaders_dict_mpe(config, drop_last=False):
     mpe_indices_dict = {}
     ratios_dict = config['ratios']
     data_generating_process = config['data_generating_process']
-    data_type = lpu.constants.DTYPE
+    data_type = LPU.constants.DTYPE
     beta = config['beta']
     if config['dataset_kind'] == 'LPU':
-        lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')    
+        lpu_dataset = LPU.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')    
         l_y_cat_transformed = lpu_dataset.l.cpu().numpy() * 2 + lpu_dataset.y.cpu().numpy()
-        split_indices_dict = lpu.utils.dataset_utils.index_group_split(np.arange(len(l_y_cat_transformed)), ratios_dict=ratios_dict, random_state=lpu.constants.RANDOM_STATE, strat_arr=l_y_cat_transformed)
+        split_indices_dict = LPU.utils.dataset_utils.index_group_split(np.arange(len(l_y_cat_transformed)), ratios_dict=ratios_dict, random_state=LPU.constants.RANDOM_STATE, strat_arr=l_y_cat_transformed)
         for split in split_indices_dict.keys():
             # *** DO NOT DELETE *** for the normal case where we have a LPU dataset
-            # samplers_dict[split], dataloders_dict[split] = lpu.utils.dataset_utils.make_data_loader(lpu_dataset, batch_size=config['batch_size'][split],)
-            mpe_dataset_dict[split], mpe_indices_dict[split] = lpu.utils.dataset_utils.LPUD_to_MPED(lpu_dataset=lpu_dataset, indices=split_indices_dict[split], data_generating_process=data_generating_process)
+            # samplers_dict[split], dataloders_dict[split] = LPU.utils.dataset_utils.make_data_loader(lpu_dataset, batch_size=config['batch_size'][split],)
+            mpe_dataset_dict[split], mpe_indices_dict[split] = LPU.utils.dataset_utils.LPUD_to_MPED(lpu_dataset=lpu_dataset, indices=split_indices_dict[split], data_generating_process=data_generating_process)
             mpe_dataloaders_dict[split] = {}
             for dataset_type in mpe_dataset_dict[split].keys():
                 mpe_dataloaders_dict[split][dataset_type] = torch.utils.data.DataLoader(mpe_dataset_dict[split][dataset_type], batch_size=config['batch_size'][split], drop_last=drop_last, shuffle=True)
             return mpe_dataloaders_dict
     elif config['dataset_kind'] == 'MPE':
         p_trainloader, u_trainloader, p_validloader, u_validloader, net, X, Y, p_validdata, u_validdata, u_traindata, p_traindata = \
-                lpu.external_libs.PU_learning.helper.get_dataset(config['data_dir'], config['data_type'], config['net_type'], device, config['alpha'], beta, config['batch_size'])
+                LPU.external_libs.PU_learning.helper.get_dataset(config['data_dir'], config['data_type'], config['net_type'], device, config['alpha'], beta, config['batch_size'])
 
 
         mpe_dataloaders_dict['train']= {}
@@ -141,7 +141,7 @@ def train_model(config=None):
         config = {}
 
     # Load the base configuration
-    base_config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    base_config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
     device = base_config['device']
     alpha = base_config['alpha']
@@ -155,7 +155,7 @@ def train_model(config=None):
 
     batch_size = base_config['batch_size']['train']
     estimate_alpha = base_config['estimate_alpha']
-    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
+    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
     y_vals = []
     y_probs = []
@@ -166,7 +166,7 @@ def train_model(config=None):
      p_testloader, u_testloader, 
      net, X, Y, p_testdata, 
      u_testdata, u_traindata) = \
-        lpu.external_libs.PU_learning.helper.get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size)
+        LPU.external_libs.PU_learning.helper.get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size)
 
     train_unlabeled_size= len(Y)
 
@@ -201,11 +201,11 @@ def train_model(config=None):
                 criterion=criterion, device=device, threshold=0.5*beta/(beta + (1-beta) * alpha),show_bar=show_bar)
             
             if estimate_alpha: 
-                pos_probs = lpu.external_libs.PU_learning.estimator.p_probs(net, device, p_trainloader)
-                unlabeled_probs, unlabeled_targets = lpu.external_libs.PU_learning.estimator.u_probs(net, device, u_trainloader)
+                pos_probs = LPU.external_libs.PU_learning.estimator.p_probs(net, device, p_trainloader)
+                unlabeled_probs, unlabeled_targets = LPU.external_libs.PU_learning.estimator.u_probs(net, device, u_trainloader)
 
 
-                alpha_estimate, _, _ = lpu.external_libs.PU_learning.estimator.BBE_estimator(pos_probs, unlabeled_probs, unlabeled_targets)
+                alpha_estimate, _, _ = LPU.external_libs.PU_learning.estimator.BBE_estimator(pos_probs, unlabeled_probs, unlabeled_targets)
                 LOG.info(f"Epoch:{epoch}, Train Acc:{train_acc}, Test Acc:{test_acc}, {alpha_estimate}")
             else: 
                 LOG.info(f"Epoch:{epoch}, Train Acc:{train_acc}, Test Acc:{test_acc}")
@@ -221,7 +221,7 @@ def train_model(config=None):
         else:
             alpha_used = config['alpha']
         
-        keep_samples, neg_reject = lpu.external_libs.PU_learning.algorithm.rank_inputs(epoch, net, u_trainloader, device,\
+        keep_samples, neg_reject = LPU.external_libs.PU_learning.algorithm.rank_inputs(epoch, net, u_trainloader, device,\
              alpha_used, u_size=train_unlabeled_size)
         train_acc = mpe_utils.train_PU_discard(epoch, net,  p_trainloader, u_trainloader,\
             optimizer, criterion, device, keep_sample=keep_samples,show_bar=show_bar)
@@ -234,10 +234,10 @@ def train_model(config=None):
 
     
         if estimate_alpha:
-            pos_probs = lpu.external_libs.PU_learning.estimator.p_probs(net, device, p_validloader)
-            unlabeled_probs, unlabeled_targets = lpu.external_libs.PU_learning.estimator.u_probs(net, device, u_validloader)
+            pos_probs = LPU.external_libs.PU_learning.estimator.p_probs(net, device, p_validloader)
+            unlabeled_probs, unlabeled_targets = LPU.external_libs.PU_learning.estimator.u_probs(net, device, u_validloader)
 
-            alpha_estimate, _, _ = lpu.external_libs.PU_learning.estimator.BBE_estimator(pos_probs, unlabeled_probs, unlabeled_targets)
+            alpha_estimate, _, _ = LPU.external_libs.PU_learning.estimator.BBE_estimator(pos_probs, unlabeled_probs, unlabeled_targets)
 
             LOG.info(f"Epoch:{epoch}, Train Acc:{train_acc}, Val Acc:{valid_acc}, Test Acc:{test_acc}, {alpha_estimate}")
 
@@ -267,7 +267,7 @@ def train_model(config=None):
     
 
         # Flatten scores_dict
-        # flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+        # flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
         # filtered_scores_dict = {}
         # for key, value in flattened_scores.items():
         #     if 'train' in key or 'val' in key or 'test' in key:
@@ -285,4 +285,4 @@ if __name__ == "__main__":
     import warnings
     warnings.simplefilter("error", category=UserWarning)
     results, best_epoch = train_model()
-    # lpu.utils.plot_utils.plot_scores(results, best_epoch=best_epoch)
+    # LPU.utils.plot_utils.plot_scores(results, best_epoch=best_epoch)

@@ -4,8 +4,8 @@ import numpy as np
 import scipy.linalg.lapack 
 import torch
 
-import lpu.constants as constants
-import lpu.utils.manifold_utils as manifold_utils
+import LPU.constants as constants
+import LPU.utils.manifold_utils as manifold_utils
 # import matrix_utils
 EPSILON = 1e-8
 

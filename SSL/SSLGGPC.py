@@ -15,7 +15,7 @@ import torch
 import numpy as np
 from sklearn.datasets import make_moons
 import matplotlib.pyplot as plt
-import lpu.models.PsychM.psychm as psychm  # Assuming this is a custom module you have for the VariationalGPModel
+import LPU.models.PsychM.psychm as psychm  # Assuming this is a custom module you have for the VariationalGPModel
 torch.set_default_dtype(torch.float64)
 # Assuming your VariationalGPModel and INTRINSIC_KERNEL_PARAMS are defined in a module named 'your_module_name'
 # from your_module_name import VariationalGPModel, INTRINSIC_KERNEL_PARAMS

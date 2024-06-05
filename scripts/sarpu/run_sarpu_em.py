@@ -2,22 +2,22 @@ import logging
 import unittest.mock
 import numpy as np
 import torch
-import lpu.constants
-import lpu.datasets.LPUDataset
+import LPU.constants
+import LPU.datasets.LPUDataset
 import sys
-sys.path.append('lpu/external_libs/SAR_PU')
-sys.path.append('lpu/external_libs/SAR_PU/sarpu')
-sys.path.append('lpu/external_libs/SAR_PU/sarpu/sarpu')
-import lpu.models.sarpu_em
-import lpu.utils.utils_general
-import lpu.utils.dataset_utils
-import lpu.utils.plot_utils
-import lpu.external_libs.SAR_PU.sarpu.sarpu.PUmodels
-import lpu.external_libs.SAR_PU.sarpu.sarpu.pu_learning
-import lpu.external_libs.SAR_PU.sarpu
-import lpu.external_libs.SAR_PU.sarpu.sarpu
+sys.path.append('LPU/external_libs/SAR_PU')
+sys.path.append('LPU/external_libs/SAR_PU/sarpu')
+sys.path.append('LPU/external_libs/SAR_PU/sarpu/sarpu')
+import LPU.models.sarpu_em
+import LPU.utils.utils_general
+import LPU.utils.dataset_utils
+import LPU.utils.plot_utils
+import LPU.external_libs.SAR_PU.sarpu.sarpu.PUmodels
+import LPU.external_libs.SAR_PU.sarpu.sarpu.pu_learning
+import LPU.external_libs.SAR_PU.sarpu
+import LPU.external_libs.SAR_PU.sarpu.sarpu
 
-torch.set_default_dtype(lpu.constants.DTYPE)
+torch.set_default_dtype(LPU.constants.DTYPE)
 
 USE_DEFAULT_CONFIG = False
 DEFAULT_CONFIG = {
@@ -80,9 +80,9 @@ DEFAULT_CONFIG = {
 ORIGINAL_LOG_FUNC = np.log
 
 def stable_log(x):
-    return ORIGINAL_LOG_FUNC(x + lpu.constants.EPSILON)
+    return ORIGINAL_LOG_FUNC(x + LPU.constants.EPSILON)
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 # Optional dynamic import for Ray
 try:
@@ -99,13 +99,13 @@ def train_model(config=None):
     if config is None:
         config = {}
     # Load the base configuration
-    config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
+    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
-    lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')
-    dataloaders_dict = lpu.utils.dataset_utils.create_dataloaders_dict(config)
-    sarpu_em_model = lpu.models.sarpu_em.SARPU(config, training_size=len(dataloaders_dict['train'].dataset))
+    lpu_dataset = LPU.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+    sarpu_em_model = LPU.models.sarpu_em.SARPU(config, training_size=len(dataloaders_dict['train'].dataset))
 
     all_scores_dict = {split: {} for split in ['train', 'val']}
     scores_dict = {split: {} for split in ['train', 'val']}
@@ -120,10 +120,10 @@ def train_model(config=None):
     scores_dict['test'] = sarpu_em_model.validate(dataloaders_dict['test'], loss_fn=sarpu_em_model.loss_fn)
 
     LOG.info(f"Scores: {scores_dict}")
-    # lpu.utils.plot_utils.plot_scores(all_scores_dict, loss_type='overall_loss')
+    # LPU.utils.plot_utils.plot_scores(all_scores_dict, loss_type='overall_loss')
 
     # Flatten scores_dict
-    flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:

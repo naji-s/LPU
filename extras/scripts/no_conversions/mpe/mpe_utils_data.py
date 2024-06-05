@@ -3,12 +3,12 @@ import torch.utils.data
 import torchvision.transforms
 import numpy as np
 
-import lpu.external_libs.PU_learning
-import lpu.external_libs.PU_learning.data
-import lpu.external_libs.PU_learning.data_helper
-import lpu.external_libs.PU_learning.helper
-import lpu.external_libs.PU_learning.model_helper
-import lpu.external_libs.PU_learning.data_helper.IMDb
+import LPU.external_libs.PU_learning
+import LPU.external_libs.PU_learning.data
+import LPU.external_libs.PU_learning.data_helper
+import LPU.external_libs.PU_learning.helper
+import LPU.external_libs.PU_learning.model_helper
+import LPU.external_libs.PU_learning.data_helper.IMDb
 
 from torch.utils.data import DataLoader, SubsetRandomSampler
 
@@ -90,14 +90,14 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
         test_pos_size = pos_size - train_pos_size - val_pos_size
 
 
-        gauss_traindata = lpu.external_libs.PU_learning.data_helper.toy.Gaussain_data(mu=1.0, sigma=np.sqrt(input_size//2), size=train_size, dim=input_size//2)
-        gauss_validdata = lpu.external_libs.PU_learning.data_helper.toy.Gaussain_data(mu=1.0, sigma=np.sqrt(input_size//2), size=val_size, dim=input_size//2)
-        gauss_testdata = lpu.external_libs.PU_learning.data_helper.toy.Gaussain_data(mu=1.0, sigma=np.sqrt(input_size//2), size=test_size, dim=input_size//2)
+        gauss_traindata = LPU.external_libs.PU_learning.data_helper.toy.Gaussain_data(mu=1.0, sigma=np.sqrt(input_size//2), size=train_size, dim=input_size//2)
+        gauss_validdata = LPU.external_libs.PU_learning.data_helper.toy.Gaussain_data(mu=1.0, sigma=np.sqrt(input_size//2), size=val_size, dim=input_size//2)
+        gauss_testdata = LPU.external_libs.PU_learning.data_helper.toy.Gaussain_data(mu=1.0, sigma=np.sqrt(input_size//2), size=test_size, dim=input_size//2)
 
 
-        p_traindata, u_traindata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(gauss_traindata, pos_size=train_pos_size, alpha=alpha, beta=beta)
-        p_validdata, u_validdata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(gauss_validdata, pos_size=val_pos_size, alpha=alpha, beta=beta)
-        p_testdata, u_testdata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(gauss_testdata, pos_size=test_pos_size, alpha=alpha, beta=beta)
+        p_traindata, u_traindata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(gauss_traindata, pos_size=train_pos_size, alpha=alpha, beta=beta)
+        p_validdata, u_validdata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(gauss_validdata, pos_size=val_pos_size, alpha=alpha, beta=beta)
+        p_testdata, u_testdata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(gauss_testdata, pos_size=test_pos_size, alpha=alpha, beta=beta)
 
         X = p_traindata.data
         Y = u_traindata.data
@@ -117,7 +117,7 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
 
         ## Initialize model 
 
-        net = lpu.external_libs.PU_learning.model_helper.get_model(net_type, input_dim = input_size)
+        net = LPU.external_libs.PU_learning.model_helper.get_model(net_type, input_dim = input_size)
         net = net.to(device)
 
     elif data_type=='toy_continuous':       
@@ -125,9 +125,9 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
         Toy dataset from P vs U failure for domain discrimination
         '''
 
-        toy_traindata = lpu.external_libs.PU_learning.data_helper.toy.ToyDataContinuous()
-        toy_validdata = lpu.external_libs.PU_learning.data_helper.toy.ToyDataContinuous()
-        toy_testdata = lpu.external_libs.PU_learning.data_helper.toy.ToyDataContinuous()
+        toy_traindata = LPU.external_libs.PU_learning.data_helper.toy.ToyDataContinuous()
+        toy_validdata = LPU.external_libs.PU_learning.data_helper.toy.ToyDataContinuous()
+        toy_testdata = LPU.external_libs.PU_learning.data_helper.toy.ToyDataContinuous()
 
         # dividing by train_ratio to get the number of positive points in the training set
         # that is in the original repo, the number of positive points is 50
@@ -137,9 +137,9 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
         val_pos_size = int(pos_size * val_ratio)
         test_pos_size = pos_size - train_pos_size - val_pos_size
 
-        p_traindata, u_traindata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(toy_traindata, pos_size=train_pos_size, alpha=alpha, beta=beta)
-        p_validdata, u_validdata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(toy_validdata, pos_size=val_pos_size, alpha=alpha, beta=beta)
-        p_testdata, u_testdata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(toy_testdata, pos_size=test_pos_size, alpha=alpha, beta=beta)
+        p_traindata, u_traindata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(toy_traindata, pos_size=train_pos_size, alpha=alpha, beta=beta)
+        p_validdata, u_validdata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(toy_validdata, pos_size=val_pos_size, alpha=alpha, beta=beta)
+        p_testdata, u_testdata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(toy_testdata, pos_size=test_pos_size, alpha=alpha, beta=beta)
 
         X = p_traindata.data
         Y = u_traindata.data
@@ -159,14 +159,14 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
         
 
         ## Initialize model 
-        net = lpu.external_libs.PU_learning.model_helper.get_model(net_type, input_dim = 2)
+        net = LPU.external_libs.PU_learning.model_helper.get_model(net_type, input_dim = 2)
         net = net.to(device)
 
     elif data_type=='toy_discrete': 
 
-        toy_traindata =lpu.external_libs.PU_learning.data_helper.toy.ToyData()
-        toy_validdata = lpu.external_libs.PU_learning.data_helper.toy.ToyData()
-        toy_testdata = lpu.external_libs.PU_learning.data_helper.toy.ToyData()
+        toy_traindata =LPU.external_libs.PU_learning.data_helper.toy.ToyData()
+        toy_validdata = LPU.external_libs.PU_learning.data_helper.toy.ToyData()
+        toy_testdata = LPU.external_libs.PU_learning.data_helper.toy.ToyData()
 
         # dividing by train_ratio to get the number of positive points in the training set
         # that is in the original repo, the number of positive points is 8
@@ -175,9 +175,9 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
         val_pos_size = int(pos_size * val_ratio)
         test_pos_size = pos_size - train_pos_size - val_pos_size
 
-        p_traindata, u_traindata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(toy_traindata, pos_size=pos_size, alpha=alpha, beta=beta)
-        p_validdata, u_validdata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(toy_validdata, pos_size=pos_size, alpha=alpha, beta=beta)
-        p_testdata, u_testdata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(toy_testdata, pos_size=pos_size, alpha=alpha, beta=beta)
+        p_traindata, u_traindata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(toy_traindata, pos_size=pos_size, alpha=alpha, beta=beta)
+        p_validdata, u_validdata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(toy_validdata, pos_size=pos_size, alpha=alpha, beta=beta)
+        p_testdata, u_testdata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(toy_testdata, pos_size=pos_size, alpha=alpha, beta=beta)
 
         X = p_traindata.data
         Y = u_traindata.data
@@ -197,7 +197,7 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
         
 
         ## Initialize model 
-        net = lpu.external_libs.PU_learning.model_helper.get_model(net_type, input_dim = 2)
+        net = LPU.external_libs.PU_learning.model_helper.get_model(net_type, input_dim = 2)
         net = net.to(device)
 
 
@@ -220,7 +220,7 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
 
 
 
-        traindata = lpu.external_libs.PU_learning.data_helper.MNIST17Data(root=data_dir, train=True, transform=transform_train)
+        traindata = LPU.external_libs.PU_learning.data_helper.MNIST17Data(root=data_dir, train=True, transform=transform_train)
         # Split indices for training and validation
         total_size = len(traindata)
         train_size = int(train_ratio * total_size)
@@ -233,11 +233,11 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
         train_pos_size = int(3000 * train_ratio)
         val_pos_size = 3000 - train_pos_size
 
-        testdata = lpu.external_libs.PU_learning.data_helper.MNIST.MNIST17Data(root=data_dir, train=False, transform=transform_test)
+        testdata = LPU.external_libs.PU_learning.data_helper.MNIST.MNIST17Data(root=data_dir, train=False, transform=transform_test)
 
-        p_traindata, u_traindata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(traindata, pos_size=train_pos_size, alpha=alpha, beta=beta,data_type='mnist')
-        p_validdata, u_validdata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(validdata, pos_size=val_pos_size, alpha=alpha, beta=beta,data_type='mnist')
-        p_testdata, u_testdata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(testdata, pos_size=500, alpha=alpha, beta=beta,data_type='mnist')
+        p_traindata, u_traindata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(traindata, pos_size=train_pos_size, alpha=alpha, beta=beta,data_type='mnist')
+        p_validdata, u_validdata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(validdata, pos_size=val_pos_size, alpha=alpha, beta=beta,data_type='mnist')
+        p_testdata, u_testdata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(testdata, pos_size=500, alpha=alpha, beta=beta,data_type='mnist')
 
 
         X = p_traindata.data.reshape((p_traindata.data.shape[0], -1))
@@ -258,7 +258,7 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
         
 
         ## Initialize model 
-        net = lpu.external_libs.PU_learning.model_helper.get_model(net_type, input_dim = 784)
+        net = LPU.external_libs.PU_learning.model_helper.get_model(net_type, input_dim = 784)
         net = net.to(device)
 
 
@@ -277,16 +277,16 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
         train_ratio = train_ratio / train_ratio + val_ratio
         val_ratio  = 1 - train_ratio
 
-        traindata = lpu.external_libs.PU_learning.data_helper.MNIST.BinarizedMNISTData(root=data_dir, train=True, transform=transform_train)
+        traindata = LPU.external_libs.PU_learning.data_helper.MNIST.BinarizedMNISTData(root=data_dir, train=True, transform=transform_train)
         train_size = int(len(traindata) * train_ratio)
         valid_size = int(len(traindata) * val_ratio)
         traindata, validdata = torch.utils.data.random_split(traindata, [train_size, valid_size])
         
-        testdata = lpu.external_libs.PU_learning.data_helper.MNIST.BinarizedMNISTData(root=data_dir, train=False, transform=transform_test)
+        testdata = LPU.external_libs.PU_learning.data_helper.MNIST.BinarizedMNISTData(root=data_dir, train=False, transform=transform_test)
 
-        p_traindata, u_traindata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(traindata, pos_size=15000, alpha=alpha, beta=beta,data_type='mnist')
-        p_validdata, u_validdata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(validdata, pos_size=2500, alpha=alpha, beta=beta,data_type='mnist')
-        p_testdata, u_testdata = lpu.external_libs.PU_learning.helper.get_PUDataSplits(testdata, pos_size=2500, alpha=alpha, beta=beta,data_type='mnist')
+        p_traindata, u_traindata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(traindata, pos_size=15000, alpha=alpha, beta=beta,data_type='mnist')
+        p_validdata, u_validdata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(validdata, pos_size=2500, alpha=alpha, beta=beta,data_type='mnist')
+        p_testdata, u_testdata = LPU.external_libs.PU_learning.helper.get_PUDataSplits(testdata, pos_size=2500, alpha=alpha, beta=beta,data_type='mnist')
 
         X = p_traindata.data.reshape((p_traindata.data.shape[0], -1))
         Y = u_traindata.data.reshape((u_traindata.data.shape[0], -1))
@@ -306,7 +306,7 @@ def get_dataset(data_dir, data_type,net_type, device, alpha, beta, batch_size, c
                                         
 
         ## Initialize model 
-        net = lpu.external_libs.PU_learning.model_helper.get_model(net_type, input_dim = 784)
+        net = LPU.external_libs.PU_learning.model_helper.get_model(net_type, input_dim = 784)
         net = net.to(device)
 
 

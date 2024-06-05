@@ -9,10 +9,10 @@ import torch
 import abc
 
 
-import lpu.constants
-import lpu.models.geometric.GVGP
-import lpu.models.lpu_model_base
-import lpu.utils.utils_general
+import LPU.constants
+import LPU.models.geometric.GVGP
+import LPU.models.lpu_model_base
+import LPU.utils.utils_general
 
 DEVICE = 'cpu'
 EPOCH_BLOCKS = 1
@@ -30,10 +30,10 @@ INTRINSIC_KERNEL_PARAMS = {
     'invert_M_first': False
 }
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 
-class GeometricGPLPUBase(lpu.models.lpu_model_base.LPUModelBase):
+class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
 
     class CustomLikelihood(gpytorch.likelihoods.Likelihood, metaclass=abc.ABCMeta):
         def __init__(self, config, **kwargs):
@@ -80,10 +80,10 @@ class GeometricGPLPUBase(lpu.models.lpu_model_base.LPUModelBase):
         # creating the geometric VGP gp_model
         intrinsic_kernel_params = self._create_intrinsinc_kernel_params_from_config(
         )
-        self.gp_model = lpu.models.geometric.GVGP.GeometricVGP(
+        self.gp_model = LPU.models.geometric.GVGP.GeometricVGP(
             inducing_points=self.inducing_points,
             intrinsic_kernel_params=intrinsic_kernel_params).to(self.device)
-        self.likelihood = self.CustomLikelihood(config, **kwargs).to(DEVICE).to(dtype=lpu.constants.DTYPE)
+        self.likelihood = self.CustomLikelihood(config, **kwargs).to(DEVICE).to(dtype=LPU.constants.DTYPE)
         self.mll = gpytorch.mlls.PredictiveLogLikelihood(
             self.likelihood,
             model=self.gp_model,
@@ -133,10 +133,10 @@ class GeometricGPLPUBase(lpu.models.lpu_model_base.LPUModelBase):
             l_batch_est = self.predict(X=X_batch, f_x=f_x)
 
             if isinstance(y_batch_prob, np.ndarray):
-                y_batch_prob = torch.tensor(y_batch_prob, dtype=lpu.constants.DTYPE)
-                l_batch_prob = torch.tensor(l_batch_prob, dtype=lpu.constants.DTYPE)
-                y_batch_est = torch.tensor(y_batch_est, dtype=lpu.constants.DTYPE)
-                l_batch_est = torch.tensor(l_batch_est, dtype=lpu.constants.DTYPE)
+                y_batch_prob = torch.tensor(y_batch_prob, dtype=LPU.constants.DTYPE)
+                l_batch_prob = torch.tensor(l_batch_prob, dtype=LPU.constants.DTYPE)
+                y_batch_est = torch.tensor(y_batch_est, dtype=LPU.constants.DTYPE)
+                l_batch_est = torch.tensor(l_batch_est, dtype=LPU.constants.DTYPE)
             loss.backward()
             overrall_loss += loss.item()
             optimizer.step()

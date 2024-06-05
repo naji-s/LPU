@@ -8,13 +8,13 @@ import logging
 
 import torch
 
-import lpu.constants
-import lpu.utils.dataset_utils
-import lpu.models.distPU
-import lpu.utils.plot_utils
-import lpu.utils.utils_general
+import LPU.constants
+import LPU.utils.dataset_utils
+import LPU.models.distPU
+import LPU.utils.plot_utils
+import LPU.utils.utils_general
 
-torch.set_default_dtype(lpu.constants.DTYPE)
+torch.set_default_dtype(LPU.constants.DTYPE)
 
 
 
@@ -59,11 +59,11 @@ DEFAULT_CONFIG = {
         "val": 64,
         "holdout": 64
     },
-    "best_model_loc": "/Users/naji/phd_codebase/lpu/scripts/distPU/best_model_checkpoints"
+    "best_model_loc": "/Users/naji/phd_codebase/LPU/scripts/distPU/best_model_checkpoints"
 }
 
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 # Optional dynamic import for Ray
 try:
@@ -84,21 +84,21 @@ def train_model(config=None):
         config = {}
 
     # Load the base configuration
-    base_config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    base_config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
+    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
-    dataloaders_dict = lpu.utils.dataset_utils.create_dataloaders_dict(base_config, transform=None, target_transform=None)
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(base_config, transform=None, target_transform=None)
 
     if base_config['dataset_kind'] == 'LPU':
         dim = dataloaders_dict['train'].dataset.X.shape[1]
     elif base_config['dataset_kind'] == 'distPU':
         dim = torch.flatten(dataloaders_dict['train'].dataset.X, 1).shape[1]
 
-    distPU_model = lpu.models.distPU.distPU(base_config, dim)
+    distPU_model = LPU.models.distPU.distPU(base_config, dim)
     distPU_model.set_C(dataloaders_dict['train'])
 
-    loss_fn = lpu.models.distPU.create_loss(base_config, prior=distPU_model.prior)
+    loss_fn = LPU.models.distPU.create_loss(base_config, prior=distPU_model.prior)
     warm_up_lr = base_config['warm_up_lr']
     warm_up_weight_decay = base_config['warm_up_weight_decay']
     warm_up_epochs = base_config['warm_up_epochs']
@@ -140,7 +140,7 @@ def train_model(config=None):
             best_scores_dict = copy.deepcopy(scores_dict)
 
     # Training
-    mixup_dataset = lpu.models.distPU.MixupDataset()
+    mixup_dataset = LPU.models.distPU.MixupDataset()
     mixup_dataset.update_psudos(dataloaders_dict['train'], distPU_model.model, distPU_model.device)
 
     lr = base_config['lr']
@@ -178,7 +178,7 @@ def train_model(config=None):
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 
     # Flatten scores_dict
-    flattened_scores = lpu.utils.utils_general.flatten_dict(best_scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:
@@ -196,4 +196,4 @@ if __name__ == "__main__":
     import warnings
     warnings.simplefilter("error", category=UserWarning)
     results, best_epoch = train_model()
-    lpu.utils.plot_utils.plot_scores(results, best_epoch=best_epoch, loss_type='overall_loss')
+    LPU.utils.plot_utils.plot_scores(results, best_epoch=best_epoch, loss_type='overall_loss')

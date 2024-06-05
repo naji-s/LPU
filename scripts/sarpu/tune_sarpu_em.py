@@ -2,9 +2,9 @@ import sys
 import ray.tune
 import ray.train
 
-import lpu.scripts
-import lpu.scripts.sarpu
-import lpu.scripts.sarpu.run_sarpu_em
+import LPU.scripts
+import LPU.scripts.sarpu
+import LPU.scripts.sarpu.run_sarpu_em
 
 def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
     # Configuration for hyperparameters to be tuned
@@ -34,7 +34,7 @@ def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
         "test_overall_loss", "test_y_auc", "test_y_accuracy", "test_y_APS"])
 
     result = ray.tune.run(
-        lpu.scripts.sarpu.run_sarpu_em.train_model,
+        LPU.scripts.sarpu.run_sarpu_em.train_model,
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,

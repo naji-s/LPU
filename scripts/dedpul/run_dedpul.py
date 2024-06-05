@@ -3,25 +3,25 @@ import unittest.mock
 
 
 import sys
-sys.path.append('lpu/external_libs/DEDPUL')
-import lpu.external_libs
-import lpu.external_libs.DEDPUL
-import lpu.external_libs.DEDPUL.NN_functions
+sys.path.append('LPU/external_libs/DEDPUL')
+import LPU.external_libs
+import LPU.external_libs.DEDPUL
+import LPU.external_libs.DEDPUL.NN_functions
 
 import torch
-import lpu.utils.utils_general
+import LPU.utils.utils_general
 
-import lpu.constants
-import lpu.datasets.LPUDataset
-import lpu.utils.dataset_utils
-import lpu.models.dedpul
-import lpu.utils.plot_utils
-import lpu.utils.utils_general
+import LPU.constants
+import LPU.datasets.LPUDataset
+import LPU.utils.dataset_utils
+import LPU.models.dedpul
+import LPU.utils.plot_utils
+import LPU.utils.utils_general
 
 
-torch.set_default_dtype(lpu.constants.DTYPE)
+torch.set_default_dtype(LPU.constants.DTYPE)
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 # Optional dynamic import for Ray
 try:
@@ -38,7 +38,7 @@ DEFAULT_CONFIG = {
     'learning_rate': .01,
     'num_epochs': 1000,
     'device': 'cpu',
-    'dtype': lpu.constants.DTYPE,
+    'dtype': LPU.constants.DTYPE,
     'train_val_ratio': .1,
     'evaluation_interval': 1,
     'epoch_blocks': 1,
@@ -93,15 +93,15 @@ def train_model(config=None):
     if config is None:
         config = {}
     # Load the base configuration
-    # base_config = lpu.utils.utils_general.load_and_process_config(config['base_config_file_path'])
+    # base_config = LPU.utils.utils_general.load_and_process_config(config['base_config_file_path'])
     # Update the base configuration with the tuning configuration for Ray if it is available
-    base_config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    base_config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
 
     # Initialize training components using the combined configuration
-    torch.set_default_dtype(lpu.constants.DTYPE)
-    dataloaders_dict = lpu.utils.dataset_utils.create_dataloaders_dict(base_config)
-    dedpul_model = lpu.models.dedpul.DEDPUL(base_config)
+    torch.set_default_dtype(LPU.constants.DTYPE)
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(base_config)
+    dedpul_model = LPU.models.dedpul.DEDPUL(base_config)
     
     # Train and report metrics
     scores_dict = dedpul_model.train(
@@ -111,7 +111,7 @@ def train_model(config=None):
         train_nn_options=base_config['train_nn_options'])
     
     # Flatten scores_dict
-    flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:

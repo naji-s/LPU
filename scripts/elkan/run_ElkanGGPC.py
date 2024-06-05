@@ -3,13 +3,13 @@ import logging
 
 import torch
 
-import lpu.constants
-import lpu.utils.dataset_utils
-import lpu.models.geometric.elkanGGPC
-import lpu.utils.plot_utils
-import lpu.utils.utils_general
+import LPU.constants
+import LPU.utils.dataset_utils
+import LPU.models.geometric.elkanGGPC
+import LPU.utils.plot_utils
+import LPU.utils.utils_general
 
-torch.set_default_dtype(lpu.constants.DTYPE)
+torch.set_default_dtype(LPU.constants.DTYPE)
 
 USE_DEFAULT_CONFIG = False
 DEFAULT_CONFIG = {
@@ -53,7 +53,7 @@ DEFAULT_CONFIG = {
 }
 
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 # Optional dynamic import for Ray
 try:
@@ -68,15 +68,15 @@ def train_model(config=None):
     if config is None:
         config = {}
     # Load the base configuration
-    base_config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    base_config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
+    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
     inducing_points_size = base_config['inducing_points_size']
-    dataloaders_dict = lpu.utils.dataset_utils.create_dataloaders_dict(base_config)
-    inducing_points_initial_vals = lpu.utils.dataset_utils.initialize_inducing_points(
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(base_config)
+    inducing_points_initial_vals = LPU.utils.dataset_utils.initialize_inducing_points(
         dataloaders_dict['train'], inducing_points_size)
-    elkan_model = lpu.models.geometric.elkanGGPC.ElkanGGPC(
+    elkan_model = LPU.models.geometric.elkanGGPC.ElkanGGPC(
         base_config,
         inducing_points_initial_vals=inducing_points_initial_vals,
         training_size=len(dataloaders_dict['train'].dataset),
@@ -127,7 +127,7 @@ def train_model(config=None):
     scores_dict['test'] = elkan_model.validate(dataloaders_dict['test'], loss_fn=elkan_model.loss_fn, model=elkan_model.gp_model)
 
     # Flatten scores_dict
-    flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:
@@ -142,4 +142,4 @@ def train_model(config=None):
         return all_scores_dict, best_epoch
 if __name__ == "__main__":
     results, best_epoch = train_model()
-    lpu.utils.plot_utils.plot_scores(results, best_epoch=best_epoch)
+    LPU.utils.plot_utils.plot_scores(results, best_epoch=best_epoch)

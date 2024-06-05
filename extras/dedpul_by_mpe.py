@@ -3,20 +3,20 @@ import copy
 
 import numpy as np
 import torch.nn
-import lpu.external_libs.DEDPUL
-import lpu.external_libs.DEDPUL.algorithms
-import lpu.external_libs.PU_learning.baselines
-import lpu.external_libs.PU_learning.baselines.dedpul
+import LPU.external_libs.DEDPUL
+import LPU.external_libs.DEDPUL.algorithms
+import LPU.external_libs.PU_learning.baselines
+import LPU.external_libs.PU_learning.baselines.dedpul
 
-import lpu.external_libs.PU_learning.utils
-import lpu.models.lpu_model_base
-import lpu.external_libs.PU_learning.estimator
-import lpu.external_libs.PU_learning.train_PU
-import lpu.constants
-import lpu.models.mpe_model
+import LPU.external_libs.PU_learning.utils
+import LPU.models.lpu_model_base
+import LPU.external_libs.PU_learning.estimator
+import LPU.external_libs.PU_learning.train_PU
+import LPU.constants
+import LPU.models.mpe_model
 
     
-class DEDPUL(lpu.models.mpe_model.MPE):
+class DEDPUL(LPU.models.mpe_model.MPE):
     def __init__(self, config):
         super(DEDPUL, self).__init__(config)
 
@@ -52,11 +52,11 @@ class DEDPUL(lpu.models.mpe_model.MPE):
         targets = np.concatenate((np.zeros_like(pdata_probs), np.ones_like(udata_probs[:,1])), axis=0 )
         
         try:    
-            diff = lpu.external_libs.PU_learning.baselines.dedpul.estimate_diff(preds, targets) 
-            alpha, poster = lpu.external_libs.PU_learning.baselines.dedpul.estimate_poster_em(diff=diff, mode='dedpul', alpha=None)
+            diff = LPU.external_libs.PU_learning.baselines.dedpul.estimate_diff(preds, targets) 
+            alpha, poster = LPU.external_libs.PU_learning.baselines.dedpul.estimate_poster_em(diff=diff, mode='dedpul', alpha=None)
 
             if alpha<=1e-4: 
-                alpha, poster =  lpu.external_libs.PU_learning.baselines.dedpul.estimate_poster_dedpul(diff=diff, alpha=alpha)
+                alpha, poster =  LPU.external_libs.PU_learning.baselines.dedpul.estimate_poster_dedpul(diff=diff, alpha=alpha)
         
         except: 
             alpha = 0.0

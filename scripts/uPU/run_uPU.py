@@ -2,17 +2,17 @@ import logging
 import unittest.mock
 import types
 import sys
-sys.path.append('/Users/naji/phd_codebase/lpu/external_libs/nnPUSB')
-import lpu.external_libs.nnPUSB.dataset
+sys.path.append('/Users/naji/phd_codebase/LPU/external_libs/nnPUSB')
+import LPU.external_libs.nnPUSB.dataset
 
 import torch.optim
-import lpu.constants
-import lpu.utils.dataset_utils
-import lpu.utils.utils_general
-import lpu.models.uPU
-import lpu.utils.plot_utils
+import LPU.constants
+import LPU.utils.dataset_utils
+import LPU.utils.utils_general
+import LPU.models.uPU
+import LPU.utils.plot_utils
 
-torch.set_default_dtype(lpu.constants.DTYPE)
+torch.set_default_dtype(LPU.constants.DTYPE)
 
 USE_DEFAULT_CONFIG = False
 DEFAULT_CONFIG = {
@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
     "learning_rate": 0.0001,
     "loss": "sigmoid",
     "model": "mlp",
-    "out": "lpu/scripts/uPU/checkpoints",
+    "out": "LPU/scripts/uPU/checkpoints",
     "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
     "dataset_kind": "LPU",
     "batch_size": {
@@ -44,7 +44,7 @@ DEFAULT_CONFIG = {
 }
 
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 # Optional dynamic import for Ray
 try:
@@ -59,15 +59,15 @@ def train_model(config=None):
     if config is None:
         config = {}
     # Load the base configuration
-    config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
+    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
-    dataloaders_dict = lpu.utils.dataset_utils.create_dataloaders_dict(config, target_transform=lpu.utils.dataset_utils.one_zero_to_minus_one_one,
-                                                                       label_transform=lpu.utils.dataset_utils.one_zero_to_minus_one_one)
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
+                                                                       label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
     X_example, _, _, _ = next(iter(dataloaders_dict['train']))
     dim = X_example.shape[-1]
-    uPU_model = lpu.models.uPU.uPU(config=config, dim=dim)
+    uPU_model = LPU.models.uPU.uPU(config=config, dim=dim)
     uPU_model.set_C(dataloaders_dict['holdout'])
 
     optimizer = torch.optim.Adam([{
@@ -75,8 +75,8 @@ def train_model(config=None):
         'lr': config.get('learning_rate', DEFAULT_CONFIG.get('learning_rate', None) if USE_DEFAULT_CONFIG else None)
     }])
     device = config.get('device', 'cpu')
-    loss_func = lpu.models.uPU.uPUloss(prior=uPU_model.prior,
-                                         loss=lpu.models.uPU.select_loss('sigmoid'),
+    loss_func = LPU.models.uPU.uPUloss(prior=uPU_model.prior,
+                                         loss=LPU.models.uPU.select_loss('sigmoid'),
                                          gamma=config.get('gamma', DEFAULT_CONFIG.get('gamma', None) if USE_DEFAULT_CONFIG else None),
                                          beta=config.get('beta', DEFAULT_CONFIG.get('beta', None) if USE_DEFAULT_CONFIG else None))
     num_epochs = config.get('epoch', DEFAULT_CONFIG.get('epoch', None) if USE_DEFAULT_CONFIG else None)
@@ -108,7 +108,7 @@ def train_model(config=None):
     scores_dict['test'] = uPU_model.validate(dataloaders_dict['test'], loss_fn=loss_func, model=uPU_model.model)
 
     # Flatten scores_dict
-    flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:
@@ -123,8 +123,8 @@ def train_model(config=None):
         return all_scores_dict, best_epoch
 
 if __name__ == "__main__":
-    yaml_file_path = '/Users/naji/phd_codebase/lpu/configs/uPU_config.yaml'
-    config = lpu.utils.utils_general.load_and_process_config(yaml_file_path)
+    yaml_file_path = '/Users/naji/phd_codebase/LPU/configs/uPU_config.yaml'
+    config = LPU.utils.utils_general.load_and_process_config(yaml_file_path)
     args = types.SimpleNamespace(**config)
     results, best_epoch = train_model()
-    lpu.utils.plot_utils.plot_scores(results, loss_type='overall_loss', best_epoch=best_epoch)
+    LPU.utils.plot_utils.plot_scores(results, loss_type='overall_loss', best_epoch=best_epoch)

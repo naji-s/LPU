@@ -3,15 +3,15 @@ import sklearn.model_selection
 import torch
 import torch.utils.data
 
-import lpu.constants
-import lpu.datasets.animal_no_animal.animal_no_animal_utils
+import LPU.constants
+import LPU.datasets.animal_no_animal.animal_no_animal_utils
 
 def normalize_features(X):
     """
     Normalizes the dataset.
     """
     if not isinstance(X, torch.Tensor):
-        X = torch.tensor(X, dtype=lpu.constants.DTYPE)
+        X = torch.tensor(X, dtype=LPU.constants.DTYPE)
     X_mean = X.mean(dim=0, keepdim=True)
     X_std = X.std(dim=0, keepdim=True)
     X_std[X_std == 0] = 1  # Prevent division by zero
@@ -65,10 +65,10 @@ class LPUDataset(torch.utils.data.Dataset):
 
         if type(X) == np.ndarray:
             X, l, y = map(
-                lambda arr: torch.tensor(arr, dtype=lpu.constants.DTYPE), [X, l, y])
+                lambda arr: torch.tensor(arr, dtype=LPU.constants.DTYPE), [X, l, y])
         else:
             X, l, y = map(
-                lambda arr: arr.to(lpu.constants.DTYPE), [X, l, y])
+                lambda arr: arr.to(LPU.constants.DTYPE), [X, l, y])
         # Normalize the input features
         if transform:
             X = self.transform(X)     
@@ -172,11 +172,11 @@ class LPUDataset(torch.utils.data.Dataset):
         Reads the data from the hard drive and returns the input features, labels, and target values.
         """
         if dataset_name == 'animal_no_animal':
-            output_location = f'{lpu.constants.ROOT_PATH}/datasets/animal_no_animal'
+            output_location = f'{LPU.constants.ROOT_PATH}/datasets/animal_no_animal'
             subject = 'mta'
             model_type = 'vgg'  # or 'HMAX'
             layers_to_extract = ['classifier_0']
-            X, y, l = lpu.datasets.animal_no_animal.animal_no_animal_utils.create_animal_no_animal_dataset(output_location=output_location, subject=subject, model_type=model_type, layers_to_extract=layers_to_extract)
+            X, y, l = LPU.datasets.animal_no_animal.animal_no_animal_utils.create_animal_no_animal_dataset(output_location=output_location, subject=subject, model_type=model_type, layers_to_extract=layers_to_extract)
         else:
             raise ValueError(f"Dataset {dataset_name} not recognized.")            
         return X, y, l

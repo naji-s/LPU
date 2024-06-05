@@ -17,12 +17,12 @@ import sklearn.metrics
 import sklearn.model_selection
 import six
 
-import lpu.constants
-import lpu.external_libs
-import lpu.extras.dedpul_by_mpe
-import lpu.models.geometric.elkanGGPC
-import lpu.models.lpu_model_base
-import lpu.external_libs.nnPUlearning.train
+import LPU.constants
+import LPU.external_libs
+import LPU.extras.dedpul_by_mpe
+import LPU.models.geometric.elkanGGPC
+import LPU.models.lpu_model_base
+import LPU.external_libs.nnPUlearning.train
 
 LOG = logging.getLogger(__name__)
 
@@ -46,9 +46,9 @@ from chainer.training import extensions
 import numpy as np
 import copy
 
-import lpu.models.lpu_model_base as base
-import lpu.external_libs.nnPUlearning.train
-import lpu.external_libs.nnPUlearning.pu_loss
+import LPU.models.lpu_model_base as base
+import LPU.external_libs.nnPUlearning.train
+import LPU.external_libs.nnPUlearning.pu_loss
 
 class ProbabilisticLGivenXEvaluator(chainer.training.extensions.Evaluator):
 
@@ -137,10 +137,10 @@ class nnPU(base.LPUModelBase):
 
     def select_model(self, model_name):
         models = {
-            "linear": lpu.external_libs.nnPUlearning.model.LinearClassifier, 
-            "3lp": lpu.external_libs.nnPUlearning.model.ThreeLayerPerceptron,
-            "mlp": lpu.external_libs.nnPUlearning.model.MultiLayerPerceptron, 
-            "cnn": lpu.external_libs.nnPUlearning.model.CNN
+            "linear": LPU.external_libs.nnPUlearning.model.LinearClassifier, 
+            "3lp": LPU.external_libs.nnPUlearning.model.ThreeLayerPerceptron,
+            "mlp": LPU.external_libs.nnPUlearning.model.MultiLayerPerceptron, 
+            "cnn": LPU.external_libs.nnPUlearning.model.CNN
         }
         return models[model_name](self.prior, self.dim)
     
@@ -158,14 +158,14 @@ class nnPU(base.LPUModelBase):
         }
 
     def train_and_evaluate(self, train_iter, valid_iter= None, loss_funcs=None, optimizers=None, num_epochs=100):
-        updater = lpu.external_libs.nnPUlearning.train.MultiUpdater(train_iter, optimizers, self.models, device=self.gpu, loss_func=loss_funcs)
+        updater = LPU.external_libs.nnPUlearning.train.MultiUpdater(train_iter, optimizers, self.models, device=self.gpu, loss_func=loss_funcs)
         trainer = chainer.training.Trainer(updater, stop_trigger=(num_epochs, 'epoch'), out=self.config['out'])
         # trainer.extend(chainer.training.extensions.LogReport(trigger=(1, 'epoch')))
         # trainer.extend(chainer.training.extensions.PrintReport(['epoch', 'nnPU/loss', 'uPU/loss', 'elapsed_time']), trigger=(1, 'epoch'))
         log_report = chainer.training.extensions.LogReport(trigger=(1, 'epoch'))
 
         # Evaluators to compute metrics on training, testing, and validation datasets
-        train_01_loss_evaluator = lpu.external_libs.nnPUlearning.train.MultiPUEvaluator(self.prior, valid_iter, self.models, device=self.gpu)
+        train_01_loss_evaluator = LPU.external_libs.nnPUlearning.train.MultiPUEvaluator(self.prior, valid_iter, self.models, device=self.gpu)
         train_01_loss_evaluator.default_name = 'trainPU'
 
         prob_y_given_X_valid_evaluator = ProbabilisticYGivenXEvaluator(valid_iter, self.models, device=self.gpu)
@@ -177,7 +177,7 @@ class nnPU(base.LPUModelBase):
         prob_l_given_X_train_evaluator.default_name = 'l_X_train_eval_auc'
 
 
-        multi_valid_evaluator = lpu.external_libs.nnPUlearning.train.MultiEvaluator(valid_iter, self.models, device=self.gpu)
+        multi_valid_evaluator = LPU.external_libs.nnPUlearning.train.MultiEvaluator(valid_iter, self.models, device=self.gpu)
         multi_valid_evaluator.default_name = 'valid_eval'
 
         # Extensions are added in the order of their execution and logging output
@@ -236,10 +236,10 @@ if __name__ == "__main__":
         'unlabeled': 59000,
         'batchsize': 256
     }
-    loss_type = lpu.external_libs.nnPUlearning.train.select_loss(config['loss'])
-    XYtrain, XYtest, prior = lpu.external_libs.nnPUlearning.dataset.load_dataset(config['dataset'], config['labeled'], config['unlabeled'])
-    loss_funcs = {"nnPU": lpu.external_libs.nnPUlearning.pu_loss.PULoss(prior, loss=loss_type, nnpu=True, gamma=config['gamma'], beta=config['beta']),
-                  "uPU": lpu.external_libs.nnPUlearning.pu_loss.PULoss(prior, loss=loss_type, nnpu=False)}
+    loss_type = LPU.external_libs.nnPUlearning.train.select_loss(config['loss'])
+    XYtrain, XYtest, prior = LPU.external_libs.nnPUlearning.dataset.load_dataset(config['dataset'], config['labeled'], config['unlabeled'])
+    loss_funcs = {"nnPU": LPU.external_libs.nnPUlearning.pu_loss.PULoss(prior, loss=loss_type, nnpu=True, gamma=config['gamma'], beta=config['beta']),
+                  "uPU": LPU.external_libs.nnPUlearning.pu_loss.PULoss(prior, loss=loss_type, nnpu=False)}
     
     dim = XYtrain[0][0].size // len(XYtrain[0][0])
     model = nnPU(config, prior=prior, dim=dim, loss_funcs=loss_funcs)

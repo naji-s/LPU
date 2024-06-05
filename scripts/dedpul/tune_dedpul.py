@@ -3,9 +3,9 @@ import json
 import ray.tune
 import ray.train
 
-import lpu.scripts
-import lpu.scripts.dedpul
-import lpu.scripts.dedpul.run_dedpul
+import LPU.scripts
+import LPU.scripts.dedpul
+import LPU.scripts.dedpul.run_dedpul
 
 def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
     search_space = {
@@ -31,14 +31,14 @@ def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
             "bins_pos": ray.tune.choice([10, 20, 30]),
             "k_neighbours": ray.tune.choice([None, 5, 10])
         },
-        "base_config_file_path": "/Users/naji/phd_codebase/lpu/configs/dedpul_config.yaml"
+        "base_config_file_path": "/Users/naji/phd_codebase/LPU/configs/dedpul_config.yaml"
     }
 
     reporter = ray.tune.CLIReporter(metric_columns=[
         "val_overall_loss", "val_y_auc", "val_y_accuracy", "val_y_APS"])
 
     result = ray.tune.run(
-        lpu.scripts.dedpul.run_dedpul.train_model,
+        LPU.scripts.dedpul.run_dedpul.train_model,
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,

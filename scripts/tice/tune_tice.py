@@ -2,9 +2,9 @@ import sys
 import ray.tune
 import ray.train
 
-import lpu.scripts
-import lpu.scripts.tice
-import lpu.scripts.tice.run_tice
+import LPU.scripts
+import LPU.scripts.tice
+import LPU.scripts.tice.run_tice
 
 def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
     # Configuration for hyperparameters to be tuned
@@ -42,7 +42,7 @@ def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
         "test_overall_loss", "test_y_auc", "test_y_accuracy", "test_y_APS"])
 
     result = ray.tune.run(
-        lpu.scripts.tice.run_tice.train_model,
+        LPU.scripts.tice.run_tice.train_model,
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,

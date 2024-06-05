@@ -11,4 +11,4 @@ gamma: 1.0
 loss: sigmoid
 model: mlp
 stepsize: 0.01
-out: /Users/naji/phd_codebase/lpu/scripts/nnPU/checkpoints
+out: /Users/naji/phd_codebase/LPU/scripts/nnPU/checkpoints

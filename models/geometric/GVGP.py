@@ -5,7 +5,7 @@ import gpytorch.variational
 import gpytorch.distributions
 import gpytorch.constraints
 import gpytorch.priors
-import lpu.utils.matrix_utils
+import LPU.utils.matrix_utils
 
 
 class GeometricVGP(gpytorch.models.ApproximateGP):
@@ -25,7 +25,7 @@ class GeometricVGP(gpytorch.models.ApproximateGP):
         # self.ambient_kernel.outputscale_prior = 0.  # Set the scale to a specific value                                        
 
         if intrinsic_kernel_params:
-            self.covar_module = lpu.utils.matrix_utils.ModifiedKernel(main_kernel=self.ambient_kernel, D=inducing_points, intrinsic_kernel_params=intrinsic_kernel_params)
+            self.covar_module = LPU.utils.matrix_utils.ModifiedKernel(main_kernel=self.ambient_kernel, D=inducing_points, intrinsic_kernel_params=intrinsic_kernel_params)
         else:
             self.covar_module = self.ambient_kernel
     def update_input_data(self, X):

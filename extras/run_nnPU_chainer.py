@@ -16,21 +16,21 @@ import chainer.variable
 import chainer.utils.type_check
 import numpy as np
 
-import lpu.external_libs
-import lpu.external_libs.nnPUlearning
-import lpu.external_libs.nnPUlearning.pu_loss
-import lpu.extras.nnPU_chainer
+import LPU.external_libs
+import LPU.external_libs.nnPUlearning
+import LPU.external_libs.nnPUlearning.pu_loss
+import LPU.extras.nnPU_chainer
 
 
 LOG = logging.getLogger(__name__)
 
 # import torch.optim
 
-import lpu.constants
-import lpu.datasets.LPUDataset
-import lpu.utils.dataset_utils
-import lpu.utils.utils_general
-import lpu.external_libs.nnPUlearning.train
+import LPU.constants
+import LPU.datasets.LPUDataset
+import LPU.utils.dataset_utils
+import LPU.utils.utils_general
+import LPU.external_libs.nnPUlearning.train
 
 LEARNING_RATE = 0.01
 INDUCING_POINTS_SIZE = 32
@@ -40,13 +40,13 @@ TRAIN_TEST_RATIO = .5
 
 
 def main():
-    chainer.config.dtype = lpu.constants.NUMPY_DTYPE
-    yaml_file_path = '/Users/naji/phd_codebase/lpu/configs/nnPU_chainer_config.yaml'
-    config = lpu.utils.utils_general.load_and_process_config(yaml_file_path)
-    lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal', normalize=False, invert_l=False)
-    train_loader, test_loader, val_loader, holdout_loader = lpu.utils.dataset_utils.create_stratified_splits(lpu_dataset, train_val_ratio=TRAIN_VAL_RATIO, batch_size=len(lpu_dataset), hold_out_size=HOLD_OUT_SIZE, train_test_ratio=TRAIN_TEST_RATIO)
+    chainer.config.dtype = LPU.constants.NUMPY_DTYPE
+    yaml_file_path = '/Users/naji/phd_codebase/LPU/configs/nnPU_chainer_config.yaml'
+    config = LPU.utils.utils_general.load_and_process_config(yaml_file_path)
+    lpu_dataset = LPU.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal', normalize=False, invert_l=False)
+    train_loader, test_loader, val_loader, holdout_loader = LPU.utils.dataset_utils.create_stratified_splits(lpu_dataset, train_val_ratio=TRAIN_VAL_RATIO, batch_size=len(lpu_dataset), hold_out_size=HOLD_OUT_SIZE, train_test_ratio=TRAIN_TEST_RATIO)
     # passing X to initialize_inducing_points to extract the initial values of inducing points
-    # nnPU_model = lpu.models.nnPU.nnPU(config)
+    # nnPU_model = LPU.models.nnPU.nnPU(config)
     args = types.SimpleNamespace(**config)
     trainX, trainL, trainY = [item.detach().numpy() for item in next(iter(train_loader))]
     testX, testL, testY = [item.detach().numpy() for item in next(iter(test_loader))]
@@ -75,15 +75,15 @@ def main():
     valid_iter = chainer.iterators.SerialIterator(XYtrain, args.batchsize, repeat=False, shuffle=False)
     test_iter = chainer.iterators.SerialIterator(XYtest, args.batchsize, repeat=False, shuffle=False)
 
-    loss_type = lpu.external_libs.nnPUlearning.train.select_loss(args.loss)
+    loss_type = LPU.external_libs.nnPUlearning.train.select_loss(args.loss)
     # Model and iterator setup (as previously described)
 
 
-    nnPU_model = lpu.extras.nnPU_chainer.nnPU(config, dim=dim)
+    nnPU_model = LPU.extras.nnPU_chainer.nnPU(config, dim=dim)
     # trainer setup
-    optimizers = {k: lpu.external_libs.nnPUlearning.train.make_optimizer(v, args.stepsize) for k, v in nnPU_model.models.items()}
-    loss_funcs = {"nnPU": lpu.external_libs.nnPUlearning.pu_loss.PULoss(prior, loss=loss_type, nnpu=True, gamma=config['gamma'], beta=config['beta']),
-                  "uPU": lpu.external_libs.nnPUlearning.pu_loss.PULoss(prior, loss=loss_type, nnpu=False)}
+    optimizers = {k: LPU.external_libs.nnPUlearning.train.make_optimizer(v, args.stepsize) for k, v in nnPU_model.models.items()}
+    loss_funcs = {"nnPU": LPU.external_libs.nnPUlearning.pu_loss.PULoss(prior, loss=loss_type, nnpu=True, gamma=config['gamma'], beta=config['beta']),
+                  "uPU": LPU.external_libs.nnPUlearning.pu_loss.PULoss(prior, loss=loss_type, nnpu=False)}
 
     nnPU_model.set_C(train_loader)
     # renew the train_iter after setting C
@@ -107,6 +107,6 @@ def main():
 
 
 if __name__ == "__main__":
-    with unittest.mock.patch.object(lpu.external_libs.nnPUlearning.pu_loss.PULoss, 'check_type_forward', lambda *x: True):
+    with unittest.mock.patch.object(LPU.external_libs.nnPUlearning.pu_loss.PULoss, 'check_type_forward', lambda *x: True):
         main()
 

@@ -35,6 +35,6 @@ batch_size:
   test: 64
   val: 64
   holdout: 64
-best_model_loc: /Users/naji/phd_codebase/lpu/scripts/distPU/best_model_checkpoints
+best_model_loc: /Users/naji/phd_codebase/LPU/scripts/distPU/best_model_checkpoints
 
  

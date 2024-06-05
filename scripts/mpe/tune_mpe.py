@@ -1,12 +1,12 @@
 import json
 import sys
-sys.path.append('lpu/external_libs/PU_learning')
-sys.path.append('lpu/external_libs/PU_learning/data_helper')
+sys.path.append('LPU/external_libs/PU_learning')
+sys.path.append('LPU/external_libs/PU_learning/data_helper')
 
 import ray.tune
 import ray.train
 
-import lpu.scripts.mpe.run_mpe
+import LPU.scripts.mpe.run_mpe
 
 def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
     # Configuration for hyperparameters to be tuned
@@ -35,7 +35,7 @@ def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
         "val_overall_loss", "val_l_auc", "val_l_accuracy", "val_l_APS"])
 
     result = ray.tune.run(
-        lpu.scripts.mpe.run_mpe.train_model,
+        LPU.scripts.mpe.run_mpe.train_model,
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,

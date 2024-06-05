@@ -11,26 +11,26 @@ import torch.distributions
 import torch.nn
 import torch.utils.data 
 
-import lpu.models.geometric.geometric_base
-import lpu.utils.matrix_utils as matrix_utils
-import lpu.constants
-import lpu.models.lpu_model_base
-import lpu.constants
-import lpu.datasets.animal_no_animal.animal_no_animal_utils
-import lpu.models.lpu_model_base
-import lpu.models.geometric.psychmGGPC
-import lpu.utils.dataset_utils
-import lpu.models.geometric.GVGP
-import lpu.utils.utils_general  
+import LPU.models.geometric.geometric_base
+import LPU.utils.matrix_utils as matrix_utils
+import LPU.constants
+import LPU.models.lpu_model_base
+import LPU.constants
+import LPU.datasets.animal_no_animal.animal_no_animal_utils
+import LPU.models.lpu_model_base
+import LPU.models.geometric.psychmGGPC
+import LPU.utils.dataset_utils
+import LPU.models.geometric.GVGP
+import LPU.utils.utils_general  
 
 # Set up logging configuration
 # logging.basicConfig(level=logging.INFO)  # Set the logging level as per your requirement
 
 # Create a logger instance
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
  
 
-class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase): 
+class PsychMGP(LPU.models.geometric.geometric_base.GeometricGPLPUBase): 
     class CustomLikelihood(gpytorch.likelihoods.Likelihood):
         SCALE = 1.
         def __init__(self, config=None, num_features=None, warm_start_params=None, is_SPM=False, *args, **kwargs):
@@ -66,12 +66,12 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
             ################################################################################################            
             LOG.info(f"True alpha: {true_alpha}")
             LOG.info(f"True beta: {true_beta}")
-            self.variational_mean_alpha = torch.nn.Parameter(torch.zeros(num_features, dtype=lpu.constants.DTYPE))# + true_alpha)
+            self.variational_mean_alpha = torch.nn.Parameter(torch.zeros(num_features, dtype=LPU.constants.DTYPE))# + true_alpha)
             # Parameter for the log of the diagonal elements to ensure they are positive
-            self.log_diag = torch.nn.Parameter(torch.randn(num_features, dtype=lpu.constants.DTYPE))
+            self.log_diag = torch.nn.Parameter(torch.randn(num_features, dtype=LPU.constants.DTYPE))
             # Parameter for the lower triangular elements below the diagonal
             # There are num_features * (num_features - 1) / 2 such elements
-            self.lower_tri = torch.nn.Parameter(torch.randn(num_features * (num_features - 1) // 2, dtype=lpu.constants.DTYPE))
+            self.lower_tri = torch.nn.Parameter(torch.randn(num_features * (num_features - 1) // 2, dtype=LPU.constants.DTYPE))
             # self.variational_covar_alpha = torch.nn.Parameter(torch.zeros(num_features))
             # self.variational_covar_alpha_L = torch.nn.Parameter(torch.zeros(num_features))
             # self.diag = torch.nn.Parameter(torch.randn(num_features))
@@ -79,22 +79,22 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
             # There are num_features * (num_features - 1) / 2 such elements
             # self.lower_tri = torch.nn.Parameter(torch.randn(num_features * (num_features - 1) // 2))
             
-            self.variational_mean_beta = torch.nn.Parameter(torch.zeros(1, dtype=lpu.constants.DTYPE).squeeze())# + true_beta)
-            self.variational_covar_beta = torch.nn.Parameter(torch.zeros(1, dtype=lpu.constants.DTYPE).squeeze()) 
+            self.variational_mean_beta = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE).squeeze())# + true_beta)
+            self.variational_covar_beta = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE).squeeze()) 
 
             # self.gamma = torch.nn.Parameter(torch.zeros(1))
             # self.lambda_ = torch.nn.Parameter(torch.zeros(1))
 
-            self.gamma_mean = torch.nn.Parameter(torch.zeros(1, dtype=lpu.constants.DTYPE))# + gamma)
-            self.lambda_mean = torch.nn.Parameter(torch.zeros(1, dtype=lpu.constants.DTYPE))# + lambda_ )
+            self.gamma_mean = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE))# + gamma)
+            self.lambda_mean = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE))# + lambda_ )
             # self.dirichlet_alpha_gamma = torch.nn.Parameter(torch.zeros(1))
             # self.dirichlet_alpha_lambda = torch.nn.Parameter(torch.zeros(1))
             # self.dirichlet_alpha_dummy = torch.ones(1)
 
-            self.gamma_var = torch.nn.Parameter(torch.randn(1, dtype=lpu.constants.DTYPE))
-            self.lambda_var = torch.nn.Parameter(torch.randn(1, dtype=lpu.constants.DTYPE))
-            self.anchor_weight = torch.nn.Parameter(torch.zeros(1, dtype=lpu.constants.DTYPE).squeeze(), requires_grad=False)
-            self.train_GP = torch.nn.Parameter(torch.ones(1, dtype=lpu.constants.DTYPE).squeeze(), requires_grad=False)
+            self.gamma_var = torch.nn.Parameter(torch.randn(1, dtype=LPU.constants.DTYPE))
+            self.lambda_var = torch.nn.Parameter(torch.randn(1, dtype=LPU.constants.DTYPE))
+            self.anchor_weight = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE).squeeze(), requires_grad=False)
+            self.train_GP = torch.nn.Parameter(torch.ones(1, dtype=LPU.constants.DTYPE).squeeze(), requires_grad=False)
             # self.alpha = torch.nn.Parameter(torch.randn(num_features))
             # self.beta = torch.nn.Parameter(torch.randn(1))
             # log sigmoid is used in the forward layer for loss to reduce floating point errors
@@ -110,8 +110,8 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
         
         def forward(self, function_samples):
             
-            # self.variational_covar_alpha = torch.matmul(L, L.transpose(-1, -2)) + torch.eye(L.shape[0]) * lpu.constants.EPSILON
-            # self.alpha = torch.distributions.LowRankMultivariateNormal(loc=self.variational_mean_alpha, cov_factor=L, cov_diag=torch.eye(L.shape[0]) * lpu.constants.EPSILON).rsample()#torch.Size([function_samples.shape[0]]))
+            # self.variational_covar_alpha = torch.matmul(L, L.transpose(-1, -2)) + torch.eye(L.shape[0]) * LPU.constants.EPSILON
+            # self.alpha = torch.distributions.LowRankMultivariateNormal(loc=self.variational_mean_alpha, cov_factor=L, cov_diag=torch.eye(L.shape[0]) * LPU.constants.EPSILON).rsample()#torch.Size([function_samples.shape[0]]))
             # Construct the diagonal part using the exponential of the log-diagonal
             diag = torch.diag(torch.exp(self.log_diag))
             
@@ -165,7 +165,7 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
             #         #- torch.logsumexp(torch.stack([torch.tile(zero, shape), torch.tile(lambda_sample, shape), torch.tile(gamma_sample, shape)], dim=1), dim=1)
             # log_like = A_leftover + H_F_B_G
             # log_like = torch.clamp(log_like, max=0.)
-            # torch.where((log_like > 0) & (log_like < lpu.constants.EPSILON), torch.ones_like(log_like, device=log_like.device), log_like)
+            # torch.where((log_like > 0) & (log_like < LPU.constants.EPSILON), torch.ones_like(log_like, device=log_like.device), log_like)
             # self.probs = torch.exp(log_like)
             # E_D = (1 - l) * torch.logsumexp(torch.stack([torch.tile(-lambda_sample, shape), -self.linear_response, -self.linear_response - lambda_sample, -function_samples, -function_samples - gamma_sample, -function_samples - lambda_sample, -self.linear_response - function_samples, -self.linear_response - function_samples - gamma_sample, -self.linear_response - function_samples - lambda_sample], dim=1), dim=1)
 
@@ -268,12 +268,12 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
     # def _initialize_likelihood(self, inducing_points):
     #     # Assuming `sig_X_train` is a parameter you need for your likelihood
     #     # It might be derived from your data or passed directly through `config`
-    #     likelihood = lpu.models.geometric.psychmGGPC.CustomLikelihood(inducing_points.shape[-1]).to(DEVICE).to(dtype=lpu.constants.DTYPE)
+    #     likelihood = LPU.models.geometric.psychmGGPC.CustomLikelihood(inducing_points.shape[-1]).to(DEVICE).to(dtype=LPU.constants.DTYPE)
     #     return likelihood    
     
     # def predict(self, X, return_std=False):
     #     # Convert X to torch tensor
-    #     X_tensor = torch.tensor(X, dtype=lpu.constants.DTYPE).to(self.device)
+    #     X_tensor = torch.tensor(X, dtype=LPU.constants.DTYPE).to(self.device)
 
     #     # Set model and likelihood to evaluation mode
     #     self.gp_model.eval()
@@ -330,10 +330,10 @@ class PsychMGP(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
                 l_batch_est = self.predict(X=X_batch, f_x=f_x)
                 
                 if isinstance(y_batch_prob, np.ndarray):
-                    y_batch_prob = torch.tensor(y_batch_prob, dtype=lpu.constants.DTYPE)
-                    l_batch_prob = torch.tensor(l_batch_prob, dtype=lpu.constants.DTYPE)
-                    y_batch_est = torch.tensor(y_batch_est, dtype=lpu.constants.DTYPE)
-                    l_batch_est = torch.tensor(l_batch_est, dtype=lpu.constants.DTYPE)
+                    y_batch_prob = torch.tensor(y_batch_prob, dtype=LPU.constants.DTYPE)
+                    l_batch_prob = torch.tensor(l_batch_prob, dtype=LPU.constants.DTYPE)
+                    y_batch_est = torch.tensor(y_batch_est, dtype=LPU.constants.DTYPE)
+                    l_batch_est = torch.tensor(l_batch_est, dtype=LPU.constants.DTYPE)
 
 
                 total_loss += loss.item()

@@ -19,7 +19,7 @@ seed: 1
 momentum: 0.9
 weight_decay: 0.005
 log_path: logs/
-modeldir: lpu/external_libs/Self_PU/checkpoints
+modeldir: LPU/external_libs/Self_PU/checkpoints
 task_name: temp
 num_workers: 0
 workers: 0

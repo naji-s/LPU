@@ -4,9 +4,9 @@ import yaml
 import ray.tune
 import ray.train
 
-import lpu.scripts
-import lpu.scripts.distPU
-import lpu.scripts.distPU.run_distPU
+import LPU.scripts
+import LPU.scripts.distPU
+import LPU.scripts.distPU.run_distPU
 
 def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
     search_space = {
@@ -37,7 +37,7 @@ def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
         "val_overall_loss", "val_y_auc", "val_y_accuracy", "val_y_APS"])
 
     result = ray.tune.run(
-        lpu.scripts.distPU.run_distPU.train_model,
+        LPU.scripts.distPU.run_distPU.train_model,
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,

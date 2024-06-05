@@ -3,27 +3,27 @@ import copy
 
 
 import sys
-sys.path.append('lpu/external_libs/PU_learning')
-sys.path.append('lpu/external_libs/PU_learning/data_helper')
+sys.path.append('LPU/external_libs/PU_learning')
+sys.path.append('LPU/external_libs/PU_learning/data_helper')
 
-import lpu.external_libs.PU_learning.helper
-import lpu.external_libs.PU_learning.utils
-import lpu.external_libs.PU_learning.algorithm
+import LPU.external_libs.PU_learning.helper
+import LPU.external_libs.PU_learning.utils
+import LPU.external_libs.PU_learning.algorithm
 
 from matplotlib import pyplot as plt
 import torch.nn
 import torch.utils.data
 import numpy as np
 
-import lpu.constants
-import lpu.utils.dataset_utils
-import lpu.datasets.LPUDataset
-import lpu.models.mpe_model
-import lpu.utils.plot_utils
-import lpu.utils.utils_general    
+import LPU.constants
+import LPU.utils.dataset_utils
+import LPU.datasets.LPUDataset
+import LPU.models.mpe_model
+import LPU.utils.plot_utils
+import LPU.utils.utils_general    
 
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 # Optional dynamic import for Ray
 try:
@@ -83,21 +83,21 @@ def create_dataloaders_dict_mpe(config, drop_last=False):
     mpe_indices_dict = {}
     ratios_dict = config['ratios']
     data_generating_process = config['data_generating_process']
-    data_type = lpu.constants.DTYPE
+    data_type = LPU.constants.DTYPE
     if config['dataset_kind'] == 'LPU':
-        lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')    
+        lpu_dataset = LPU.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')    
         l_y_cat_transformed = lpu_dataset.l.cpu().numpy() * 2 + lpu_dataset.y.cpu().numpy()
-        split_indices_dict = lpu.utils.dataset_utils.index_group_split(np.arange(len(l_y_cat_transformed)), ratios_dict=ratios_dict, random_state=lpu.constants.RANDOM_STATE, strat_arr=l_y_cat_transformed)
+        split_indices_dict = LPU.utils.dataset_utils.index_group_split(np.arange(len(l_y_cat_transformed)), ratios_dict=ratios_dict, random_state=LPU.constants.RANDOM_STATE, strat_arr=l_y_cat_transformed)
         for split in split_indices_dict.keys():
             # *** DO NOT DELETE *** for the normal case where we have a LPU dataset
-            # samplers_dict[split], dataloders_dict[split] = lpu.utils.dataset_utils.make_data_loader(lpu_dataset, batch_size=config['batch_size'][split],)
-            mpe_dataset_dict[split], mpe_indices_dict[split] = lpu.utils.dataset_utils.LPUD_to_MPED(lpu_dataset=lpu_dataset, indices=split_indices_dict[split], data_generating_process=data_generating_process)
+            # samplers_dict[split], dataloders_dict[split] = LPU.utils.dataset_utils.make_data_loader(lpu_dataset, batch_size=config['batch_size'][split],)
+            mpe_dataset_dict[split], mpe_indices_dict[split] = LPU.utils.dataset_utils.LPUD_to_MPED(lpu_dataset=lpu_dataset, indices=split_indices_dict[split], data_generating_process=data_generating_process)
             mpe_dataloaders_dict[split] = {}
             for dataset_type in mpe_dataset_dict[split].keys():
                 mpe_dataloaders_dict[split][dataset_type] = torch.utils.data.DataLoader(mpe_dataset_dict[split][dataset_type], batch_size=config['batch_size'][split], drop_last=drop_last, shuffle=True)
     elif config['dataset_kind'] == 'MPE':
         p_trainloader, u_trainloader, p_validloader, u_validloader, net, X, Y, p_validdata, u_validdata, u_traindata, p_traindata = \
-                lpu.external_libs.PU_learning.helper.get_dataset(config['data_dir'], config['data_type'], config['net_type'], config['device'], config['alpha'], config['beta'], config['batch_size'])
+                LPU.external_libs.PU_learning.helper.get_dataset(config['data_dir'], config['data_type'], config['net_type'], config['device'], config['alpha'], config['beta'], config['batch_size'])
 
 
         mpe_dataloaders_dict['train']= {}
@@ -127,13 +127,13 @@ def train_model(config=None):
     if config is None:
         config = {}
     # Load the base configuration
-    base_config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    base_config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
+    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
     criterion = torch.nn.CrossEntropyLoss()
 
-    mpe_model = lpu.models.mpe_model.MPE(base_config)
+    mpe_model = LPU.models.mpe_model.MPE(base_config)
 
     mpe_dataloaders_dict = create_dataloaders_dict_mpe(base_config)
 
@@ -222,7 +222,7 @@ def train_model(config=None):
 
 
     # Flatten scores_dict
-    flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:
@@ -240,4 +240,4 @@ if __name__ == "__main__":
     import warnings
     warnings.simplefilter("error", category=UserWarning)
     results, best_epoch = train_model()
-    lpu.utils.plot_utils.plot_scores(results, best_epoch=best_epoch)
+    LPU.utils.plot_utils.plot_scores(results, best_epoch=best_epoch)

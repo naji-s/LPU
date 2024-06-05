@@ -67,16 +67,16 @@ import sklearn.datasets
 import torch
 import torch.utils.data 
 
-import lpu.constants
-import lpu.datasets
-import lpu.datasets.LPUDataset
-# import lpu.external_libs.Self_PU
-# import lpu.external_libs.Self_PU.datasets
-# import lpu.external_libs.distPU.dataTools.factory
-# import lpu.external_libs.nnPUSB
-# import lpu.external_libs.nnPUSB.dataset
-import lpu.models
-# import lpu.models.nnPUSB
+import LPU.constants
+import LPU.datasets
+import LPU.datasets.LPUDataset
+# import LPU.external_libs.Self_PU
+# import LPU.external_libs.Self_PU.datasets
+# import LPU.external_libs.distPU.dataTools.factory
+# import LPU.external_libs.nnPUSB
+# import LPU.external_libs.nnPUSB.dataset
+import LPU.models
+# import LPU.models.nnPUSB
 # Assuming LPUDataset is defined as per previous corrections
 
 
@@ -181,7 +181,7 @@ class StratifiedSampler(torch.utils.data.Sampler):
 
             
 def LPUD_to_MPED(lpu_dataset, indices, data_generating_process='CC'):
-    import lpu.external_libs.PU_learning.helper
+    import LPU.external_libs.PU_learning.helper
     if data_generating_process == 'CC':
         # use all unlabeled data, which means we are using labeled data by removing the labels, to 
         # make the case-control assumption hold
@@ -196,9 +196,9 @@ def LPUD_to_MPED(lpu_dataset, indices, data_generating_process='CC'):
     p_indices = indices[lpu_dataset.l[indices]==1]
 
 
-    PDataset = lpu.external_libs.PU_learning.helper.PosData(
+    PDataset = LPU.external_libs.PU_learning.helper.PosData(
         transform=lpu_dataset.transform, target_transform=None, data=lpu_dataset.X[p_indices], index=np.arange(len(p_indices)))
-    UDataset = lpu.external_libs.PU_learning.helper.UnlabelData(
+    UDataset = LPU.external_libs.PU_learning.helper.UnlabelData(
         transform=lpu_dataset.transform, target_transform=None, 
         pos_data=lpu_dataset.X[unlabeled_indices][lpu_dataset.y[unlabeled_indices]==1], 
         neg_data=lpu_dataset.X[unlabeled_indices][lpu_dataset.y[unlabeled_indices]==0],
@@ -223,40 +223,40 @@ def create_dataloaders_dict(config, target_transform=None, label_transform=None,
     indices_dict = {}
     ratios_dict = config['ratios']
     if config['dataset_kind'] == 'LPU':
-        lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(dataset_name=config['dataset_name'])    
+        lpu_dataset = LPU.datasets.LPUDataset.LPUDataset(dataset_name=config['dataset_name'])    
     elif config['dataset_kind'] == 'distPU':
-        dataset_train, dataset_test = lpu.external_libs.distPU.dataTools.factory.create_dataset(config['dataset_name'], config['datapath'])
+        dataset_train, dataset_test = LPU.external_libs.distPU.dataTools.factory.create_dataset(config['dataset_name'], config['datapath'])
         X = np.concatenate([dataset_train.X, dataset_test.X], axis=0)
         Y = np.concatenate([dataset_train.Y, dataset_test.Y], axis=0)
-        dataset = lpu.external_libs.distPU.dataTools.factory.BCDataset(X=X, Y=Y)
-        pu_dataset = lpu.external_libs.distPU.dataTools.factory.create_pu_dataset(dataset, config['num_labeled'])
+        dataset = LPU.external_libs.distPU.dataTools.factory.BCDataset(X=X, Y=Y)
+        pu_dataset = LPU.external_libs.distPU.dataTools.factory.create_pu_dataset(dataset, config['num_labeled'])
         l = pu_dataset.Y_PU
         X = pu_dataset.X_train
         Y = np.concatenate([pu_dataset.Y_train, np.ones(len(pu_dataset.Y_PU) - len(pu_dataset.Y_train))])
-        lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict={'X': X, 'l': l, 'y': Y}, transform=transform, target_transform=target_transform)
+        lpu_dataset = LPU.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict={'X': X, 'l': l, 'y': Y}, transform=transform, target_transform=target_transform)
     elif config['dataset_kind'] == 'selfPU':
         if config['dataset_name'] == 'mnist':
-            (trainX, trainY), (testX, testY) = lpu.external_libs.Self_PU.datasets.get_mnist()
-            _trainY, _testY = lpu.external_libs.Self_PU.datasets.binarize_mnist_class(trainY, testY)
+            (trainX, trainY), (testX, testY) = LPU.external_libs.Self_PU.datasets.get_mnist()
+            _trainY, _testY = LPU.external_libs.Self_PU.datasets.binarize_mnist_class(trainY, testY)
 
             # print ("SELF PACED TYPE:", config['self_paced_type'], vars(args))
-            dataset_train_clean = lpu.external_libs.Self_PU.datasets.MNIST_Dataset(1000, 60000, 
+            dataset_train_clean = LPU.external_libs.Self_PU.datasets.MNIST_Dataset(1000, 60000, 
                 trainX, _trainY, testX, _testY, split='train', ids=[],
-                increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], top = config['top'], type="clean", seed = lpu.constants.RANDOM_STATE)
+                increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], top = config['top'], type="clean", seed = LPU.constants.RANDOM_STATE)
             X = torch.concat([torch.tensor(dataset_train_clean.X), testX], dim=0)
             Y = torch.concat([torch.tensor(dataset_train_clean.T), torch.tensor(_testY)], dim=0)
             l = torch.concat([torch.tensor(dataset_train_clean.Y), torch.tensor(_testY)], dim=0)
 
             # l = (l + 1) / 2
             # Y = (Y + 1) / 2
-            lpu_dataset = lpu.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict={'X': X, 'l': l, 'y': Y}, transform=transform, target_transform=target_transform)
+            lpu_dataset = LPU.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict={'X': X, 'l': l, 'y': Y}, transform=transform, target_transform=target_transform)
 
         else:
             raise ValueError("")
     elif config['dataset_kind'] == 'nnPUSB':
         if config['dataset_name'] == 'mnist':
             data_dict = {}
-            dataset_dict, prior, dim = lpu.models.nnPUSB.load_dataset(dataset_name=config['dataset_name'], n_labeled=200, n_unlabeled=69800, with_bias=True, resample_model=config["resample_model"])
+            dataset_dict, prior, dim = LPU.models.nnPUSB.load_dataset(dataset_name=config['dataset_name'], n_labeled=200, n_unlabeled=69800, with_bias=True, resample_model=config["resample_model"])
         else:
             raise ValueError("")
             
@@ -268,18 +268,18 @@ def create_dataloaders_dict(config, target_transform=None, label_transform=None,
     l_binary = (l == l_uniques[1]).astype(int)
     y_binary = (y == y_uniques[1]).astype(int)
     l_y_cat_transformed = l_binary * 2 + y_binary
-    split_indices_dict = index_group_split(np.arange(len(l_y_cat_transformed)), ratios_dict=ratios_dict, random_state=lpu.constants.RANDOM_STATE, strat_arr=l_y_cat_transformed)
+    split_indices_dict = index_group_split(np.arange(len(l_y_cat_transformed)), ratios_dict=ratios_dict, random_state=LPU.constants.RANDOM_STATE, strat_arr=l_y_cat_transformed)
     if len(dataset_dict) == 0:
         dataset_dict = {split: None for split in split_indices_dict.keys()}
     for split in split_indices_dict.keys():
         if dataset_dict[split]:
             datas_dict = {'X': dataset_dict[split][0], 'l': dataset_dict[split][1], 'y': dataset_dict[split][2]}
-            split_dataset = lpu.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict=datas_dict, transform=transform, target_transform=target_transform, label_transform=label_transform)
+            split_dataset = LPU.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict=datas_dict, transform=transform, target_transform=target_transform, label_transform=label_transform)
             samplers_dict[split], dataloaders_dict[split] = make_data_loader(dataset=split_dataset, batch_size=config['batch_size'][split])
         else:
             # *** DO NOT DELETE *** for the normal case where we have a LPU dataset
             X, l, y, _ = lpu_dataset[split_indices_dict[split]]
-            dataset_dict[split] = lpu.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict={'X': X, 'l': l, 'y': y}, transform=transform, target_transform=target_transform, label_transform=label_transform)
+            dataset_dict[split] = LPU.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict={'X': X, 'l': l, 'y': y}, transform=transform, target_transform=target_transform, label_transform=label_transform)
             samplers_dict[split], dataloaders_dict[split] = make_data_loader(dataset=dataset_dict[split], batch_size=config['batch_size'][split])
     return dataloaders_dict
 

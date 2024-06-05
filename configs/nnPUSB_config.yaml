@@ -9,7 +9,7 @@ gamma: 1.0
 learning_rate: 0.01
 loss: sigmoid
 model: mlp
-out: /Users/naji/phd_codebase/lpu/scripts/nnPUSB/checkpoints
+out: /Users/naji/phd_codebase/LPU/scripts/nnPUSB/checkpoints
 data_generating_process: SB #SB # either of CC (case-control) or (SB) (selection-bias)
 
 dataset_kind: LPU

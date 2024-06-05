@@ -8,7 +8,7 @@ gamma: 1.0
 learning_rate: 0.0001
 loss: sigmoid
 model: mlp
-out: lpu/scripts/uPU/checkpoints
+out: LPU/scripts/uPU/checkpoints
 data_generating_process: SB #SB # either of CC (case-control) or (SB) (selection-bias)
 
 dataset_kind: LPU

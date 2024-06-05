@@ -19,21 +19,21 @@ import numpy as np
 import pandas as pd
 import sklearn.model_selection
 import torch
-import lpu.constants
-import lpu.external_libs
-import lpu.models.geometric.elkanGGPC
-import lpu.models.lpu_model_base
-import lpu.external_libs.Self_PU.datasets
-import lpu.external_libs.Self_PU.functions
-import lpu.external_libs.Self_PU.mean_teacher
-import lpu.external_libs.Self_PU.meta_models
-import lpu.external_libs.Self_PU.models
-import lpu.external_libs.Self_PU.utils
-import lpu.utils.utils_general
+import LPU.constants
+import LPU.external_libs
+import LPU.models.geometric.elkanGGPC
+import LPU.models.lpu_model_base
+import LPU.external_libs.Self_PU.datasets
+import LPU.external_libs.Self_PU.functions
+import LPU.external_libs.Self_PU.mean_teacher
+import LPU.external_libs.Self_PU.meta_models
+import LPU.external_libs.Self_PU.models
+import LPU.external_libs.Self_PU.utils
+import LPU.utils.utils_general
 
-torch.set_default_dtype(lpu.constants.DTYPE)
+torch.set_default_dtype(LPU.constants.DTYPE)
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 EPSILON = 1e-16
 
@@ -89,7 +89,7 @@ def accuracy(output, target):
     else:
         return pcorrect / ptotal * 100, ncorrect / (batch_size - ptotal) * 100, correct / batch_size * 100, ptotal
 
-class selfPU(lpu.models.lpu_model_base.LPUModelBase):
+class selfPU(LPU.models.lpu_model_base.LPUModelBase):
     """
     """
     def __init__(self, config, switched=False, *args, **kwargs):
@@ -102,16 +102,16 @@ class selfPU(lpu.models.lpu_model_base.LPUModelBase):
         self.ema_decay = None
         self.soft_label = self.config.get('soft_label', False)
         self.num_workers = self.config.get('num_workers', 0)
-        self.model_dir = self.config.get('model_dir', 'lpu/scripts/selfPU')
+        self.model_dir = self.config.get('model_dir', 'LPU/scripts/selfPU')
         self.dim = self.config.get('dim', 784)
         self.switched = switched    
         self.mean_teacher_step = 0
 
     def create_meta_mlp(self):
-        return lpu.external_libs.Self_PU.meta_models.MetaMLP(dim=self.dim)
+        return LPU.external_libs.Self_PU.meta_models.MetaMLP(dim=self.dim)
     
     def create_model(self, ema=False):
-        model_dict = {'mnist': self.create_meta_mlp, 'cifar': lpu.external_libs.Self_PU.meta_models.MetaCNN, 'animal_no_animal':self.create_meta_mlp}
+        model_dict = {'mnist': self.create_meta_mlp, 'cifar': LPU.external_libs.Self_PU.meta_models.MetaCNN, 'animal_no_animal':self.create_meta_mlp}
         model = model_dict[self.config['dataset_name']]()
         if ema:
             for param in model.parameters():
@@ -169,7 +169,7 @@ class selfPU(lpu.models.lpu_model_base.LPUModelBase):
 
     # def predict_proba(self, X):
     #     self.model.eval()
-    #     return torch.sigmoid(self.model(torch.as_tensor(X, dtype=lpu.constants.DTYPE))).detach().numpy().flatten()
+    #     return torch.sigmoid(self.model(torch.as_tensor(X, dtype=LPU.constants.DTYPE))).detach().numpy().flatten()
 
     def predict_prob_y_given_X(self, X):
         return self.predict_proba(X) / self.C
@@ -543,10 +543,10 @@ class selfPU(lpu.models.lpu_model_base.LPUModelBase):
             l_batch_est = self.predict(f_x=detached_f_x)
 
             if isinstance(y_batch_prob, np.ndarray):
-                y_batch_prob = torch.tensor(y_batch_prob, dtype=lpu.constants.DTYPE)
-                l_batch_prob = torch.tensor(l_batch_prob, dtype=lpu.constants.DTYPE)
-                y_batch_est = torch.tensor(y_batch_est, dtype=lpu.constants.DTYPE)
-                l_batch_est = torch.tensor(l_batch_est, dtype=lpu.constants.DTYPE)
+                y_batch_prob = torch.tensor(y_batch_prob, dtype=LPU.constants.DTYPE)
+                l_batch_prob = torch.tensor(l_batch_prob, dtype=LPU.constants.DTYPE)
+                y_batch_est = torch.tensor(y_batch_est, dtype=LPU.constants.DTYPE)
+                l_batch_est = torch.tensor(l_batch_est, dtype=LPU.constants.DTYPE)
 
             loss_batch_concat.append(loss.item())
             l_batch_concat.append(Y)
@@ -846,10 +846,10 @@ class selfPU(lpu.models.lpu_model_base.LPUModelBase):
             l_batch_est = self.predict(f_x=detached_f_x)
 
             if isinstance(y_batch_prob, np.ndarray):
-                y_batch_prob = torch.tensor(y_batch_prob, dtype=lpu.constants.DTYPE)
-                l_batch_prob = torch.tensor(l_batch_prob, dtype=lpu.constants.DTYPE)
-                y_batch_est = torch.tensor(y_batch_est, dtype=lpu.constants.DTYPE)
-                l_batch_est = torch.tensor(l_batch_est, dtype=lpu.constants.DTYPE)
+                y_batch_prob = torch.tensor(y_batch_prob, dtype=LPU.constants.DTYPE)
+                l_batch_prob = torch.tensor(l_batch_prob, dtype=LPU.constants.DTYPE)
+                y_batch_est = torch.tensor(y_batch_est, dtype=LPU.constants.DTYPE)
+                l_batch_est = torch.tensor(l_batch_est, dtype=LPU.constants.DTYPE)
 
             loss_batch_concat.append(loss.item())
             l_batch_concat.append(Y)
@@ -1001,10 +1001,10 @@ class selfPU(lpu.models.lpu_model_base.LPUModelBase):
                 l_batch_est = self.predict(f_x=f_x)
                 
                 if isinstance(y_batch_prob, np.ndarray):
-                    y_batch_prob = torch.tensor(y_batch_prob, dtype=lpu.constants.DTYPE)
-                    l_batch_prob = torch.tensor(l_batch_prob, dtype=lpu.constants.DTYPE)
-                    y_batch_est = torch.tensor(y_batch_est, dtype=lpu.constants.DTYPE)
-                    l_batch_est = torch.tensor(l_batch_est, dtype=lpu.constants.DTYPE)
+                    y_batch_prob = torch.tensor(y_batch_prob, dtype=LPU.constants.DTYPE)
+                    l_batch_prob = torch.tensor(l_batch_prob, dtype=LPU.constants.DTYPE)
+                    y_batch_est = torch.tensor(y_batch_est, dtype=LPU.constants.DTYPE)
+                    l_batch_est = torch.tensor(l_batch_est, dtype=LPU.constants.DTYPE)
 
 
                 total_loss += loss.item()

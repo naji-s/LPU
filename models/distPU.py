@@ -2,22 +2,22 @@ import logging
 import numpy as np
 import torch.nn
 import torchvision.models
-import lpu.external_libs
-import lpu.external_libs.distPU.customized
-import lpu.external_libs.distPU.customized.mixup
-import lpu.external_libs.distPU.losses
-import lpu.external_libs.distPU.losses.distributionLoss
-import lpu.external_libs.distPU.losses.entropyMinimization
-import lpu.external_libs.distPU.losses.factory
-import lpu.external_libs.distPU.models.modelForCIFAR10
-import lpu.external_libs.distPU.models.modelForFMNIST
-import lpu.models.distPU
-import lpu.models.lpu_model_base
-import lpu.constants
-import lpu.external_libs.distPU.models.factory
-import lpu.external_libs.distPU.models.modelForCIFAR10
-import lpu.external_libs.distPU.models.modelForFMNIST
-import lpu.utils.auxiliary_models
+import LPU.external_libs
+import LPU.external_libs.distPU.customized
+import LPU.external_libs.distPU.customized.mixup
+import LPU.external_libs.distPU.losses
+import LPU.external_libs.distPU.losses.distributionLoss
+import LPU.external_libs.distPU.losses.entropyMinimization
+import LPU.external_libs.distPU.losses.factory
+import LPU.external_libs.distPU.models.modelForCIFAR10
+import LPU.external_libs.distPU.models.modelForFMNIST
+import LPU.models.distPU
+import LPU.models.lpu_model_base
+import LPU.constants
+import LPU.external_libs.distPU.models.factory
+import LPU.external_libs.distPU.models.modelForCIFAR10
+import LPU.external_libs.distPU.models.modelForFMNIST
+import LPU.utils.auxiliary_models
 
 LOG = logging.getLogger(__name__)
 
@@ -56,13 +56,13 @@ def create_loss(config, prior=None):
         prior = CLASS_PRIOR[config['dataset']]
     print('prior: {}'.format(prior))
     if config['loss'] == 'Dist-PU':
-        base_loss = lpu.external_libs.distPU.losses.distributionLoss.LabelDistributionLoss(prior=prior, device=config['device'])
+        base_loss = LPU.external_libs.distPU.losses.distributionLoss.LabelDistributionLoss(prior=prior, device=config['device'])
     else:
         raise NotImplementedError("The loss: {} is not defined!".format(args.loss))
 
     def loss_fn_entropy(outputs, labels):
         scores = torch.sigmoid(torch.clamp(outputs, min=-10, max=10))
-        return base_loss(outputs, labels) + config['co_mu'] * lpu.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores[labels!=1])
+        return base_loss(outputs, labels) + config['co_mu'] * LPU.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores[labels!=1])
 
     if config['entropy'] == 1:
         return loss_fn_entropy
@@ -70,9 +70,9 @@ def create_loss(config, prior=None):
 
 def create_model(dataset, dim):
     if dataset.startswith('cifar'):
-        return lpu.external_libs.distPU.models.modelForCIFAR10.CNN()
+        return LPU.external_libs.distPU.models.modelForCIFAR10.CNN()
     elif dataset.startswith('fmnist'):
-        return lpu.external_libs.distPU.models.modelForFMNIST.MultiLayerPerceptron(dim)
+        return LPU.external_libs.distPU.models.modelForFMNIST.MultiLayerPerceptron(dim)
     elif dataset == 'alzheimer':
         model = torchvision.models.resnet50(pretrained=False)
         model.fc = torch.nn.Linear(2048, 1)
@@ -80,7 +80,7 @@ def create_model(dataset, dim):
     else:
         raise NotImplementedError("The model: {} is not defined!".format(dataset))
 
-class distPU(lpu.models.lpu_model_base.LPUModelBase):
+class distPU(LPU.models.lpu_model_base.LPUModelBase):
     def __init__(self, config, dim):
         super(distPU, self).__init__()
         self.config = config
@@ -88,9 +88,9 @@ class distPU(lpu.models.lpu_model_base.LPUModelBase):
         self.dim = dim
         # initializing the model
         if config['dataset_kind'] == 'LPU':
-            self.model = lpu.utils.auxiliary_models.MultiLayerPerceptron(input_dim=dim, output_dim=1).to(self.device).to(lpu.constants.DTYPE)
+            self.model = LPU.utils.auxiliary_models.MultiLayerPerceptron(input_dim=dim, output_dim=1).to(self.device).to(LPU.constants.DTYPE)
         else:
-            self.model = lpu.models.distPU.create_model('fmnist', dim=dim).to(self.device).to(lpu.constants.DTYPE)
+            self.model = LPU.models.distPU.create_model('fmnist', dim=dim).to(self.device).to(LPU.constants.DTYPE)
 
     def train_one_epoch(self, epoch, dataloader, loss_fn, optimizer, scheduler):
         self.model.train()
@@ -118,7 +118,7 @@ class distPU(lpu.models.lpu_model_base.LPUModelBase):
             l = l.to(self.device)
             psudos = mixup_dataset.psudo_labels[index].to(self.device)
             psudos[l==1] = 1
-            mixed_x, y_a, y_b, lam = lpu.external_libs.distPU.customized.mixup.mixup_two_targets(X, psudos, self.config['alpha'], self.device)
+            mixed_x, y_a, y_b, lam = LPU.external_libs.distPU.customized.mixup.mixup_two_targets(X, psudos, self.config['alpha'], self.device)
             outputs = self.model(mixed_x).squeeze()
             outputs = torch.clamp(outputs, min=-10, max=10)
             scores = torch.sigmoid(outputs)
@@ -128,9 +128,9 @@ class distPU(lpu.models.lpu_model_base.LPUModelBase):
             scores_ = torch.sigmoid(outputs_)
             loss = (
                 loss_fn(outputs_, l.float()) +
-                co_entropy*lpu.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores_[l!=1]) +
-                self.config['co_mix_entropy']*lpu.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores) +
-                self.config['co_mixup'] * lpu.external_libs.distPU.customized.mixup.mixup_bce(scores, y_a, y_b, lam)
+                co_entropy*LPU.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores_[l!=1]) +
+                self.config['co_mix_entropy']*LPU.external_libs.distPU.losses.entropyMinimization.loss_entropy(scores) +
+                self.config['co_mixup'] * LPU.external_libs.distPU.customized.mixup.mixup_bce(scores, y_a, y_b, lam)
             )
             optimizer.zero_grad()
             loss.backward()
@@ -145,7 +145,7 @@ class distPU(lpu.models.lpu_model_base.LPUModelBase):
         with torch.no_grad():
             if f_x is None:
                 if type(X) == np.ndarray:
-                    X = torch.tensor(X, dtype=lpu.constants.DTYPE)
+                    X = torch.tensor(X, dtype=LPU.constants.DTYPE)
                 X = X.to(self.device)
                 f_x = self.model(X).squeeze()
             if f_x.flatten().dim() == 2:

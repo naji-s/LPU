@@ -2,7 +2,7 @@ from abc import abstractmethod
 import logging
 import random
 import sys
-sys.path.append('lpu/external_libs/DEDPUL')
+sys.path.append('LPU/external_libs/DEDPUL')
 import unittest.mock
 
 
@@ -11,13 +11,13 @@ import pandas as pd
 import sklearn.model_selection
 import torch
 
-import lpu.constants
-import lpu.external_libs
-import lpu.models.geometric.elkanGGPC
-import lpu.models.lpu_model_base
-import lpu.external_libs.DEDPUL
-import lpu.external_libs.DEDPUL.algorithms
-import lpu.external_libs.DEDPUL.NN_functions
+import LPU.constants
+import LPU.external_libs
+import LPU.models.geometric.elkanGGPC
+import LPU.models.lpu_model_base
+import LPU.external_libs.DEDPUL
+import LPU.external_libs.DEDPUL.algorithms
+import LPU.external_libs.DEDPUL.NN_functions
 
 def expanding_wrapper(*args, **kwargs):
     if 'center' in kwargs:
@@ -31,7 +31,7 @@ EPSILON = 1e-16
 
 
 
-class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
+class DEDPUL(LPU.models.lpu_model_base.LPUModelBase):
     """
     Using estimator of p(s|X) to predict p(y|X)
     """
@@ -40,8 +40,8 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                     n_epochs=200, batch_size=64, n_batches=None, n_early_stop=5,
                     d_scheduler=None, training_mode='standard', disp=False, loss_function=None, nnre_alpha=None,
                     metric=None, stop_by_metric=False, bayes=False, bayes_weight=1e-5, beta=0, gamma=1):
-        """ ** NOTE **: Identical to the lpu.external_libs.DEDPUL.NN_functions.train_NN, but with some modifications to set the 
-            type of variables in the model to global constant value lpu.constants.DTYPE
+        """ ** NOTE **: Identical to the LPU.external_libs.DEDPUL.NN_functions.train_NN, but with some modifications to set the 
+            type of variables in the model to global constant value LPU.constants.DTYPE
         Train discriminator to classify mix_data from pos_data.
         """
         if n_batches is None:
@@ -69,20 +69,20 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                 batch_mix = np.array(random.sample(list(mix_data), batch_size_mix))
                 batch_pos = np.array(random.sample(list(pos_data), batch_size_pos))
 
-                batch_mix = torch.as_tensor(batch_mix, dtype=lpu.constants.DTYPE)
-                batch_pos = torch.as_tensor(batch_pos, dtype=lpu.constants.DTYPE)
+                batch_mix = torch.as_tensor(batch_mix, dtype=LPU.constants.DTYPE)
+                batch_pos = torch.as_tensor(batch_pos, dtype=LPU.constants.DTYPE)
 
                 # Optimize D
                 d_optimizer.zero_grad()
 
                 if training_mode == 'standard':
                     if bayes:
-                        loss = lpu.external_libs.DEDPUL.NN_functions.d_loss_bayes(batch_mix, batch_pos, discriminator, loss_function, bayes_weight)
+                        loss = LPU.external_libs.DEDPUL.NN_functions.d_loss_bayes(batch_mix, batch_pos, discriminator, loss_function, bayes_weight)
                     else:
-                        loss = lpu.external_libs.DEDPUL.NN_functions.d_loss_standard(batch_mix, batch_pos, discriminator, loss_function)
+                        loss = LPU.external_libs.DEDPUL.NN_functions.d_loss_standard(batch_mix, batch_pos, discriminator, loss_function)
 
                 else:
-                    loss = lpu.external_libs.DEDPUL.NN_functions.d_loss_nnRE(batch_mix, batch_pos, discriminator, nnre_alpha, beta=beta, gamma=gamma,
+                    loss = LPU.external_libs.DEDPUL.NN_functions.d_loss_nnRE(batch_mix, batch_pos, discriminator, nnre_alpha, beta=beta, gamma=gamma,
                                     loss_function=loss_function)
 
                 loss.backward()
@@ -97,16 +97,16 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
 
                 if training_mode == 'standard':
                     if bayes:
-                        d_losses_val.append(lpu.external_libs.DEDPUL.NN_functions.d_loss_bayes(torch.as_tensor(mix_data_val, dtype=lpu.constants.DTYPE),
-                                                                torch.as_tensor(pos_data_val, dtype=lpu.constants.DTYPE),
+                        d_losses_val.append(LPU.external_libs.DEDPUL.NN_functions.d_loss_bayes(torch.as_tensor(mix_data_val, dtype=LPU.constants.DTYPE),
+                                                                torch.as_tensor(pos_data_val, dtype=LPU.constants.DTYPE),
                                                                 discriminator, w=bayes_weight).item())
                     else:
-                        d_losses_val.append(lpu.external_libs.DEDPUL.NN_functions.d_loss_standard(torch.as_tensor(mix_data_val, dtype=lpu.constants.DTYPE),
-                                                                torch.as_tensor(pos_data_val, dtype=lpu.constants.DTYPE),
+                        d_losses_val.append(LPU.external_libs.DEDPUL.NN_functions.d_loss_standard(torch.as_tensor(mix_data_val, dtype=LPU.constants.DTYPE),
+                                                                torch.as_tensor(pos_data_val, dtype=LPU.constants.DTYPE),
                                                                 discriminator).item())
                 elif training_mode == 'nnre':
-                    d_losses_val.append(lpu.external_libs.DEDPUL.NN_functions.d_loss_nnRE(torch.as_tensor(mix_data_val, dtype=lpu.constants.DTYPE),
-                                                        torch.as_tensor(pos_data_val, dtype=lpu.constants.DTYPE),
+                    d_losses_val.append(LPU.external_libs.DEDPUL.NN_functions.d_loss_nnRE(torch.as_tensor(mix_data_val, dtype=LPU.constants.DTYPE),
+                                                        torch.as_tensor(pos_data_val, dtype=LPU.constants.DTYPE),
                                                         discriminator, nnre_alpha).item())
 
             if mix_data_test is not None and pos_data_test is not None:
@@ -115,20 +115,20 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
 
                 if training_mode == 'standard':
                     if bayes:
-                        d_losses_test.append(round(lpu.external_libs.DEDPUL.NN_functions.d_loss_bayes(torch.as_tensor(mix_data_test, dtype=lpu.constants.DTYPE),
-                                                                torch.as_tensor(pos_data_test, dtype=lpu.constants.DTYPE),
+                        d_losses_test.append(round(LPU.external_libs.DEDPUL.NN_functions.d_loss_bayes(torch.as_tensor(mix_data_test, dtype=LPU.constants.DTYPE),
+                                                                torch.as_tensor(pos_data_test, dtype=LPU.constants.DTYPE),
                                                                 discriminator, w=bayes_weight).item(), 5))
                     else:
-                        d_losses_test.append(round(lpu.external_libs.DEDPUL.NN_functions.d_loss_standard(torch.as_tensor(mix_data_test, dtype=lpu.constants.DTYPE),
-                                                                torch.as_tensor(pos_data_test, dtype=lpu.constants.DTYPE),
+                        d_losses_test.append(round(LPU.external_libs.DEDPUL.NN_functions.d_loss_standard(torch.as_tensor(mix_data_test, dtype=LPU.constants.DTYPE),
+                                                                torch.as_tensor(pos_data_test, dtype=LPU.constants.DTYPE),
                                                                 discriminator).item(), 5))
                 elif training_mode == 'nnre':
-                    d_losses_test.append(round(lpu.external_libs.DEDPUL.NN_functions.d_loss_nnRE(torch.as_tensor(mix_data_test, dtype=lpu.constants.DTYPE),
-                                                        torch.as_tensor(pos_data_test, dtype=lpu.constants.DTYPE),
+                    d_losses_test.append(round(LPU.external_libs.DEDPUL.NN_functions.d_loss_nnRE(torch.as_tensor(mix_data_test, dtype=LPU.constants.DTYPE),
+                                                        torch.as_tensor(pos_data_test, dtype=LPU.constants.DTYPE),
                                                         discriminator, nnre_alpha).item(), 5))
                 if metric is not None:
                     d_metrics_test.append(metric(target_test,
-                                                discriminator(torch.as_tensor(data_test, dtype=lpu.constants.DTYPE)).detach().numpy()))
+                                                discriminator(torch.as_tensor(data_test, dtype=LPU.constants.DTYPE)).detach().numpy()))
 
 
                 if epoch >= n_early_stop:
@@ -155,7 +155,7 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
     def modified_estimate_preds_cv(df, target, test_df, test_target, cv=3, n_networks=1, lr=1e-4, hid_dim=32, n_hid_layers=1,
                         random_state=None, training_mode='standard', alpha=None, l2=1e-4, train_nn_options=None,
                         all_conv=False, bayes=False, bn=True):
-        """ ** NOTE ** Identical to lpu.external_libs.DEDPUL.algorithms.estimate_preds_cv, but with some modifications to output the discriminator
+        """ ** NOTE ** Identical to LPU.external_libs.DEDPUL.algorithms.estimate_preds_cv, but with some modifications to output the discriminator
             as well
 
         Estimates posterior probability y(x) of belonging to U rather than P (ignoring relative sizes of U and P);
@@ -206,11 +206,11 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                 mix_data_val = val_data[val_target == 1]
                 pos_data_val = val_data[val_target == 0]
                 if not all_conv:
-                    discriminator = lpu.external_libs.DEDPUL.algorithms.get_discriminator(inp_dim=df.shape[1], out_dim=1, hid_dim=hid_dim,
+                    discriminator = LPU.external_libs.DEDPUL.algorithms.get_discriminator(inp_dim=df.shape[1], out_dim=1, hid_dim=hid_dim,
                                                     n_hid_layers=n_hid_layers, bayes=bayes, bn=bn)
                 else:
-                    discriminator = lpu.external_libs.DEDPUL.algorithms.all_convolution(hid_dim_full=hid_dim, bayes=bayes, bn=bn)
-                discriminator.to(lpu.constants.DTYPE)
+                    discriminator = LPU.external_libs.DEDPUL.algorithms.all_convolution(hid_dim_full=hid_dim, bayes=bayes, bn=bn)
+                discriminator.to(LPU.constants.DTYPE)
                 d_optimizer = optim.Adam(discriminator.parameters(), lr=lr, weight_decay=l2)
 
                 
@@ -235,21 +235,21 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                 
                 if bayes:
                     pred, mean, var = discriminator(
-                        torch.as_tensor(val_data, dtype=lpu.constants.DTYPE), return_params=True, sample_noise=False)
+                        torch.as_tensor(val_data, dtype=LPU.constants.DTYPE), return_params=True, sample_noise=False)
                     preds[i, val_index], means[i, val_index], variances[i, val_index] = \
                         pred.detach().numpy().flatten(), mean.detach().numpy().flatten(), var.detach().numpy().flatten()
                 else:
                     preds[i, val_index] = discriminator(
-                        torch.as_tensor(val_data, dtype=lpu.constants.DTYPE)).detach().numpy().flatten()
+                        torch.as_tensor(val_data, dtype=LPU.constants.DTYPE)).detach().numpy().flatten()
 
                 if bayes:
                     pred, mean, var = discriminator(
-                        torch.as_tensor(test_df, dtype=lpu.constants.DTYPE), return_params=True, sample_noise=False)
+                        torch.as_tensor(test_df, dtype=LPU.constants.DTYPE), return_params=True, sample_noise=False)
                     preds_test[i, :], means_test[i, :], variances_test[i, :] = \
                         pred.detach().numpy().flatten(), mean.detach().numpy().flatten(), var.detach().numpy().flatten()
                 else:
                     preds_test[i, :] = discriminator(
-                        torch.as_tensor(test_df, dtype=lpu.constants.DTYPE)).detach().numpy().flatten()
+                        torch.as_tensor(test_df, dtype=LPU.constants.DTYPE)).detach().numpy().flatten()
         
         preds = preds.mean(axis=0)
         preds_test = preds_test.mean(axis=0)
@@ -271,8 +271,8 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                         alpha=None, alpha_as_mean_poster=True, **kwargs):
         """
         identical to https://github.com/dimonenka/DEDPUL/blob/04c028101a509b2efe3d55de457b5df92439bb59/algorithms.py#L371
-        except that the model variable types has been changed to lpu.constants.DTYPE
-        corrected method locations since they're being imported from lpu.external_libs.DEDPUL.algorithms
+        except that the model variable types has been changed to LPU.constants.DTYPE
+        corrected method locations since they're being imported from LPU.external_libs.DEDPUL.algorithms
         and also removed plotting logic
 
 
@@ -300,9 +300,9 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
 
         if alpha is not None:
             if mode == 'dedpul':
-                alpha, poster = lpu.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha, alpha_as_mean_poster=alpha_as_mean_poster, tol=tol, **kwargs)
+                alpha, poster = LPU.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha, alpha_as_mean_poster=alpha_as_mean_poster, tol=tol, **kwargs)
             elif mode == 'en':
-                _, poster = lpu.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha, **kwargs)
+                _, poster = LPU.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha, **kwargs)
             return alpha, poster
 
         # if converge:
@@ -310,9 +310,9 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
         for i in range(max_iterations):
 
             if mode.endswith('dedpul'):
-                _, poster_converge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha_converge, **kwargs)
+                _, poster_converge = LPU.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha_converge, **kwargs)
             elif mode == 'en':
-                _, poster_converge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha_converge, **kwargs)
+                _, poster_converge = LPU.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha_converge, **kwargs)
 
             mean_poster = np.mean(poster_converge)
             error = mean_poster - alpha_converge
@@ -333,9 +333,9 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
         for alpha_nonconverge in np.arange(0, 1, step):
 
             if mode.endswith('dedpul'):
-                _, poster_nonconverge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha_nonconverge, **kwargs)
+                _, poster_nonconverge = LPU.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha_nonconverge, **kwargs)
             elif mode == 'en':
-                _, poster_nonconverge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha_nonconverge, **kwargs)
+                _, poster_nonconverge = LPU.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha_nonconverge, **kwargs)
             errors = np.append(errors, np.mean(poster_nonconverge) - alpha_nonconverge)
 
         idx = np.argmax(np.diff(np.diff(errors))[errors[1: -1] < max_diff])
@@ -348,9 +348,9 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
 
         elif nonconverge:
             if mode == 'dedpul':
-                _, poster_nonconverge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha_nonconverge, **kwargs)
+                _, poster_nonconverge = LPU.external_libs.DEDPUL.algorithms.estimate_poster_dedpul(diff, alpha=alpha_nonconverge, **kwargs)
             elif mode == 'en':
-                _, poster_nonconverge = lpu.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha_nonconverge, **kwargs)
+                _, poster_nonconverge = LPU.external_libs.DEDPUL.algorithms.estimate_poster_en(preds, target, alpha=alpha_nonconverge, **kwargs)
 
             if disp:
                 print('didn\'t converge')
@@ -370,7 +370,7 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
         identical to 
         https://github.com/dimonenka/DEDPUL/blob/04c028101a509b2efe3d55de457b5df92439bb59/algorithms.py#L469
 
-        just corrected module locations since they're being imported from lpu.external_libs.DEDPUL.algorithms
+        just corrected module locations since they're being imported from LPU.external_libs.DEDPUL.algorithms
         or third party libraries with absolute imports. also simplified so the estimator=='dedpul' 
         and other cases are removed
 
@@ -417,11 +417,11 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
                 (preds, means, variances), (preds_test, means_test, variances_test), loss_dict = preds, preds_test, loss_dict
 
             if bayes:
-                diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff_bayes(means, variances, target, **estimate_diff_options)
-                diff_test = lpu.external_libs.DEDPUL.algorithms.estimate_diff_bayes(means_test, variances_test, target, **estimate_diff_options)
+                diff = LPU.external_libs.DEDPUL.algorithms.estimate_diff_bayes(means, variances, target, **estimate_diff_options)
+                diff_test = LPU.external_libs.DEDPUL.algorithms.estimate_diff_bayes(means_test, variances_test, target, **estimate_diff_options)
             else:
-                diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds, target, **estimate_diff_options)
-                diff_test = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds_test, test_target, **estimate_diff_options)
+                diff = LPU.external_libs.DEDPUL.algorithms.estimate_diff(preds, target, **estimate_diff_options)
+                diff_test = LPU.external_libs.DEDPUL.algorithms.estimate_diff(preds_test, test_target, **estimate_diff_options)
 
             alpha, poster = DEDPUL.modified_estimate_poster_em(diff=diff, mode='dedpul', alpha=alpha, **estimate_poster_options)
             _, poster_test = DEDPUL.modified_estimate_poster_em(diff=diff_test, mode='dedpul', alpha=alpha, **estimate_poster_options)
@@ -454,9 +454,9 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
     #     X = X.numpy()
     #     X = pd.DataFrame(X)
     #     self.threshold = self.config.get('threshold', (preds[l==1].mean()+preds[l==0].mean())/2)
-    #     diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds, 1-l, bw_mix=self.bw_mix, bw_pos=self.bw_pos, kde_mode=self.kde_mode, threshold=self.threshold,
+    #     diff = LPU.external_libs.DEDPUL.algorithms.estimate_diff(preds, 1-l, bw_mix=self.bw_mix, bw_pos=self.bw_pos, kde_mode=self.kde_mode, threshold=self.threshold,
     #                  MT=False, MT_coef=self.MT_coef, tune=False, decay_MT_coef=False, n_gauss_mix=20, n_gauss_pos=10,bins_mix=20, bins_pos=20, k_neighbours=None)
-    #     self.alpha, _ =  lpu.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, self.dedepul_type, alpha_as_mean_poster=True)
+    #     self.alpha, _ =  LPU.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, self.dedepul_type, alpha_as_mean_poster=True)
     #     self.holdout_l_mean = l.mean()
     #     self.C = self.holdout_l_mean * (1-self.alpha)
 
@@ -545,7 +545,7 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
     
 
     def loss_fn(self, X_batch, l_batch):
-        return lpu.external_libs.DEDPUL.NN_functions.d_loss_standard(X_batch[l_batch == 1], X_batch[l_batch == 0], self.discriminator, self.loss_type)
+        return LPU.external_libs.DEDPUL.NN_functions.d_loss_standard(X_batch[l_batch == 1], X_batch[l_batch == 0], self.discriminator, self.loss_type)
     
 
     # def validate(self, dataloader, holdoutloader):
@@ -583,9 +583,9 @@ class DEDPUL(lpu.models.lpu_model_base.LPUModelBase):
     #     all_X = torch.vstack((holdout_all_X, all_X))
     #     all_l = torch.hstack((holdout_all_l, all_l))
     #     preds = self.discriminator(all_X).detach().cpu().numpy().flatten()
-    #     diff = lpu.external_libs.DEDPUL.algorithms.estimate_diff(preds=preds, target=all_l, bw_mix=self.bw_mix, bw_pos=self.bw_pos, kde_mode=self.kde_mode, threshold=self.threshold,
+    #     diff = LPU.external_libs.DEDPUL.algorithms.estimate_diff(preds=preds, target=all_l, bw_mix=self.bw_mix, bw_pos=self.bw_pos, kde_mode=self.kde_mode, threshold=self.threshold,
     #                 MT=False, MT_coef=self.MT_coef, tune=False, decay_MT_coef=False, n_gauss_mix=20, n_gauss_pos=10,bins_mix=20, bins_pos=20, k_neighbours=None)
-    #     self.alpha, poster =  lpu.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, self.dedepul_type, alpha_as_mean_poster=True)
+    #     self.alpha, poster =  LPU.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, self.dedepul_type, alpha_as_mean_poster=True)
     #     y_probs = poster[len(holdout_all_l):]
     #     l_probs = preds[len(holdout_all_l):]
     #     l_vals = all_l[len(holdout_all_l):]

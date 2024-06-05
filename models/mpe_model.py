@@ -3,15 +3,15 @@ import copy
 
 import numpy as np
 import torch.nn
-import lpu.external_libs.PU_learning.utils
-import lpu.models.lpu_model_base
-import lpu.external_libs.PU_learning.estimator
-import lpu.constants
-import lpu.utils
-import lpu.utils.auxiliary_models
+import LPU.external_libs.PU_learning.utils
+import LPU.models.lpu_model_base
+import LPU.external_libs.PU_learning.estimator
+import LPU.constants
+import LPU.utils
+import LPU.utils.auxiliary_models
 
     
-class MPE(lpu.models.lpu_model_base.LPUModelBase):
+class MPE(LPU.models.lpu_model_base.LPUModelBase):
     def __init__(self, config):
         super(MPE, self).__init__()
         self.config = config
@@ -25,7 +25,7 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
         else:
             self.alpha_estimate = config['alpha_estimate']
     def initialize_model(self, dim):
-        self.net = lpu.utils.auxiliary_models.MultiLayerPerceptron(input_dim=dim, output_dim=2).to(self.device).to(lpu.constants.DTYPE)
+        self.net = LPU.utils.auxiliary_models.MultiLayerPerceptron(input_dim=dim, output_dim=2).to(self.device).to(LPU.constants.DTYPE)
         if self.config['device'].startswith('cuda'):
             self.net = torch.nn.DataParallel(self.net)
             torch.cudnn.benchmark = True
@@ -233,7 +233,7 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
             correct += np.sum(correct_preds)
 
             if self.show_bar: 
-                lpu.external_libs.PU_learning.utils.progress_bar(batch_idx, len(p_trainloader) + len(u_trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                LPU.external_libs.PU_learning.utils.progress_bar(batch_idx, len(p_trainloader) + len(u_trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                     % (total_loss/(batch_idx+1), 100.*correct/total_size, correct, total_size))
         all_y_outputs = torch.nn.functional.softmax(all_y_outputs, dim=-1)[:,1].detach().cpu().numpy().squeeze()
         # all_l_outputs = 1 - all_y_outputs
@@ -366,7 +366,7 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
             correct += np.sum(correct_preds)
 
             if self.show_bar:
-                lpu.external_libs.PU_learning.utils.progress_bar(batch_idx, len(p_trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                LPU.external_libs.PU_learning.utils.progress_bar(batch_idx, len(p_trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                     % (train_loss/(batch_idx+1), 100.*correct/total_size, correct, total_size))
                 
         total_loss /= len(p_trainloader)                
@@ -444,7 +444,7 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
                     neg_total += len(neg_idx)
 
                 if self.show_bar: 
-                    lpu.external_libs.PU_learning.utils.progress_bar(batch_idx, len(u_validloader) , 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                    LPU.external_libs.PU_learning.utils.progress_bar(batch_idx, len(u_validloader) , 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                         % (total_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
                 # y = 1 - y
@@ -488,7 +488,7 @@ class MPE(lpu.models.lpu_model_base.LPUModelBase):
     def predict_prob_y_given_X(self, X=None, f_x=None):
         if f_x is None:
             if type(X) == np.ndarray:
-                X = torch.tensor(X, dtype=lpu.constants.DTYPE)
+                X = torch.tensor(X, dtype=LPU.constants.DTYPE)
             X = X.to(self.device)
             f_x = self.net(X)
         predicted_prob  = torch.nn.functional.softmax(f_x, dim=-1)[:,1]

@@ -12,8 +12,8 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import models, transforms
 from skimage.io import imread
 import pickle
-from lpu.extras.pytorch_hmax import hmax  # Ensure hmax is installed and accessible
-import lpu.constants as constants
+from LPU.extras.pytorch_hmax import hmax  # Ensure hmax is installed and accessible
+import LPU.constants as constants
 LOG = logging.getLogger(__name__)
 # LOG.setLevel(logging.DEBUG)
 

@@ -2,9 +2,9 @@ import sys
 import ray.tune
 import ray.train
 
-import lpu.scripts
-import lpu.scripts.vpu
-import lpu.scripts.vpu.run_vpu
+import LPU.scripts
+import LPU.scripts.vpu
+import LPU.scripts.vpu.run_vpu
 
 def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
     # Configuration for hyperparameters to be tuned
@@ -24,7 +24,7 @@ def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
         "test_overall_loss", "test_phi_loss", "test_reg_loss"])
 
     result = ray.tune.run(
-        lpu.scripts.vpu.run_vpu.train_model,
+        LPU.scripts.vpu.run_vpu.train_model,
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,

@@ -7,18 +7,18 @@ pytorch models in this library. That is a future TODO (naji)
 import logging
 import sys
 
-import lpu.external_libs.nnPUlearning
-# sys.path.append('lpu/external_libs/nnPUSB')
+import LPU.external_libs.nnPUlearning
+# sys.path.append('LPU/external_libs/nnPUSB')
 
 import numpy as np
 import torch
 import scipy.special
 
-import lpu.constants
-import lpu.external_libs
-import lpu.models.geometric.elkanGGPC
-import lpu.models.lpu_model_base
-import lpu.models.uPU
+import LPU.constants
+import LPU.external_libs
+import LPU.models.geometric.elkanGGPC
+import LPU.models.lpu_model_base
+import LPU.models.uPU
 
 
 LOG = logging.getLogger(__name__)
@@ -242,7 +242,7 @@ class uPUloss(torch.nn.Module):
         else:
             return objective
 
-class uPU(lpu.models.lpu_model_base.LPUModelBase):
+class uPU(LPU.models.lpu_model_base.LPUModelBase):
     def __init__(self, config, dim=None, **kwargs):
         super(uPU, self).__init__(**kwargs)
         self.config = config
@@ -255,7 +255,7 @@ class uPU(lpu.models.lpu_model_base.LPUModelBase):
             "mlp": MultiLayerPerceptron, 
             "cnn": CNN
         }
-        self.model = models[self.config['model']](self.dim).to(lpu.constants.DTYPE)
+        self.model = models[self.config['model']](self.dim).to(LPU.constants.DTYPE)
     
     def set_C(self, holdout_dataloader):
         _, holdout_l, holdout_y, _ = next(iter(holdout_dataloader))
@@ -301,10 +301,10 @@ class uPU(lpu.models.lpu_model_base.LPUModelBase):
             l_batch_est = self.predict(f_x=detached_f_x)
 
             if isinstance(y_batch_prob, np.ndarray):
-                y_batch_prob = torch.tensor(y_batch_prob, dtype=lpu.constants.DTYPE)
-                l_batch_prob = torch.tensor(l_batch_prob, dtype=lpu.constants.DTYPE)
-                y_batch_est = torch.tensor(y_batch_est, dtype=lpu.constants.DTYPE)
-                l_batch_est = torch.tensor(l_batch_est, dtype=lpu.constants.DTYPE)
+                y_batch_prob = torch.tensor(y_batch_prob, dtype=LPU.constants.DTYPE)
+                l_batch_prob = torch.tensor(l_batch_prob, dtype=LPU.constants.DTYPE)
+                y_batch_est = torch.tensor(y_batch_est, dtype=LPU.constants.DTYPE)
+                l_batch_est = torch.tensor(l_batch_est, dtype=LPU.constants.DTYPE)
 
 
 

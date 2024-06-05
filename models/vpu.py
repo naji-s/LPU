@@ -7,27 +7,27 @@ import torch.nn
 import torchvision.models
 
 
-import lpu.external_libs
-import lpu.external_libs.distPU.customized
-import lpu.external_libs.distPU.customized.mixup
-import lpu.external_libs.distPU.losses
-import lpu.external_libs.distPU.losses.distributionLoss
-import lpu.external_libs.distPU.losses.entropyMinimization
-import lpu.external_libs.distPU.losses.factory
-import lpu.external_libs.distPU.models.modelForCIFAR10
-import lpu.external_libs.distPU.models.modelForFMNIST
-import lpu.external_libs.vpu
-import lpu.external_libs.vpu.model
-import lpu.external_libs.vpu.model.model_cifar
-import lpu.external_libs.vpu.utils
-import lpu.external_libs.vpu.utils.func
-import lpu.models.distPU
-import lpu.models.lpu_model_base
-import lpu.constants
-import lpu.external_libs.distPU.models.factory
-import lpu.external_libs.distPU.models.modelForCIFAR10
-import lpu.external_libs.distPU.models.modelForFMNIST
-import lpu.utils.auxiliary_models
+import LPU.external_libs
+import LPU.external_libs.distPU.customized
+import LPU.external_libs.distPU.customized.mixup
+import LPU.external_libs.distPU.losses
+import LPU.external_libs.distPU.losses.distributionLoss
+import LPU.external_libs.distPU.losses.entropyMinimization
+import LPU.external_libs.distPU.losses.factory
+import LPU.external_libs.distPU.models.modelForCIFAR10
+import LPU.external_libs.distPU.models.modelForFMNIST
+import LPU.external_libs.vpu
+import LPU.external_libs.vpu.model
+import LPU.external_libs.vpu.model.model_cifar
+import LPU.external_libs.vpu.utils
+import LPU.external_libs.vpu.utils.func
+import LPU.models.distPU
+import LPU.models.lpu_model_base
+import LPU.constants
+import LPU.external_libs.distPU.models.factory
+import LPU.external_libs.distPU.models.modelForCIFAR10
+import LPU.external_libs.distPU.models.modelForFMNIST
+import LPU.utils.auxiliary_models
 
 LOG = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def cal_val_var(config, model_phi, val_p_loader, val_u_loader):
                 data_u, _ = unlabeled_tuple
             if torch.cuda.is_available():
                 data_u = data_u.cuda()
-            data_u = data_u.to(lpu.constants.DTYPE)
+            data_u = data_u.to(LPU.constants.DTYPE)
             output_phi_u_curr = model_phi(data_u)
             if idx == 0:
                 output_phi_u = output_phi_u_curr
@@ -66,7 +66,7 @@ def cal_val_var(config, model_phi, val_p_loader, val_u_loader):
                 data_p, _ = p_tuple
             if torch.cuda.is_available():
                 data_p = data_p.cuda()
-            data_p = data_p.to(lpu.constants.DTYPE)
+            data_p = data_p.to(LPU.constants.DTYPE)
             output_phi_p_curr = model_phi(data_p)
             if idx == 0:
                 output_phi_p = output_phi_p_curr
@@ -80,24 +80,24 @@ def cal_val_var(config, model_phi, val_p_loader, val_u_loader):
 def get_model_by_dataset(dataset_name):
     """ Returns the model class based on the dataset name. """    
     dataset_to_model = {
-        'cifar10': lpu.external_libs.vpu.model.model_cifar.NetworkPhi,
-        'fashionMNIST': lpu.external_libs.vpu.model.model_fashionmnist.NetworkPhi,
-        'stl10': lpu.external_libs.vpu.model.model_stl.NetworkPhi,
-        'pageblocks': lpu.external_libs.vpu.model.model_vec.NetworkPhi,
-        'grid': lpu.external_libs.vpu.model.model_vec.NetworkPhi,
-        'avila': lpu.external_libs.vpu.model.model_vec.NetworkPhi,
-        'animal_no_animal': lpu.utils.auxiliary_models.MultiLayerPerceptron
+        'cifar10': LPU.external_libs.vpu.model.model_cifar.NetworkPhi,
+        'fashionMNIST': LPU.external_libs.vpu.model.model_fashionmnist.NetworkPhi,
+        'stl10': LPU.external_libs.vpu.model.model_stl.NetworkPhi,
+        'pageblocks': LPU.external_libs.vpu.model.model_vec.NetworkPhi,
+        'grid': LPU.external_libs.vpu.model.model_vec.NetworkPhi,
+        'avila': LPU.external_libs.vpu.model.model_vec.NetworkPhi,
+        'animal_no_animal': LPU.utils.auxiliary_models.MultiLayerPerceptron
     }
     return dataset_to_model.get(dataset_name)
 
-class VPU(lpu.models.lpu_model_base.LPUModelBase):
+class VPU(LPU.models.lpu_model_base.LPUModelBase):
     def __init__(self, config, **kwargs):
         super(VPU, self).__init__()
         self.config = config
         self.device = config.get('device')
         if self.config['dataset_kind'] not in ['LPU', 'MPE']:
             kwargs.pop('input_dim')
-        self.model = get_model_by_dataset(config['dataset_name'])(**kwargs).to(self.device).to(lpu.constants.DTYPE)
+        self.model = get_model_by_dataset(config['dataset_name'])(**kwargs).to(self.device).to(LPU.constants.DTYPE)
 
     def train_one_epoch(self, config, opt_phi, p_loader, u_loader):
         """
@@ -131,7 +131,7 @@ class VPU(lpu.models.lpu_model_base.LPUModelBase):
                 data_p, _ = positive_tuple
 
             data_all = torch.concat((data_p, data_u))
-            data_all = data_all.to(self.config['device']).to(lpu.constants.DTYPE)
+            data_all = data_all.to(self.config['device']).to(LPU.constants.DTYPE)
             output_phi_all = self.model(data_all)
             log_phi_all = output_phi_all[:, 1]
             idu_p = slice(0, len(data_p))
@@ -164,7 +164,7 @@ class VPU(lpu.models.lpu_model_base.LPUModelBase):
             if torch.cuda.is_available():
                 data = data.cuda()
                 target = target.cuda()
-            data = data.to(lpu.constants.DTYPE)
+            data = data.to(LPU.constants.DTYPE)
             out_log_phi_all = self.model(data)
             reg_mix_log = ((torch.log(target) - out_log_phi_all[:, 1]) ** 2).mean()
             total_reg_loss += reg_mix_log.item()
@@ -191,7 +191,7 @@ class VPU(lpu.models.lpu_model_base.LPUModelBase):
         # inverting labels since MPE loaders have inverse labeling, i.e. 0 for positive and 1 for negative
         y_all = 1 - y_all
         # Calculate scores on concatenated data
-        train_data_all = train_data_all.to(lpu.constants.DTYPE)
+        train_data_all = train_data_all.to(LPU.constants.DTYPE)
         train_y_probs = torch.exp(f_x_all).detach().cpu().numpy()
         train_l_probs = np.random.uniform(0, 1, len(train_y_probs))
         train_l_ests = (train_l_probs > 0.5).astype(int)
@@ -222,7 +222,7 @@ class VPU(lpu.models.lpu_model_base.LPUModelBase):
                 train_data_u, _ = train_u_tuple
             train_data = train_data_u
             # this line is about the 
-            train_data = train_data.to(lpu.constants.DTYPE)
+            train_data = train_data.to(LPU.constants.DTYPE)
             if torch.cuda.is_available():
                 train_data = train_data.cuda()
             train_log_max_phi = max(train_log_max_phi, self.model(train_data)[:, 1].max())
@@ -244,7 +244,7 @@ class VPU(lpu.models.lpu_model_base.LPUModelBase):
             if torch.cuda.is_available():
                 val_data = val_data.cuda()
                 y_val = y_val.cuda()
-            val_data = val_data.to(lpu.constants.DTYPE)
+            val_data = val_data.to(LPU.constants.DTYPE)
             val_log_phi = self.model(val_data)[:, 1]
             val_log_phi -= train_log_max_phi
             if idx == 0:

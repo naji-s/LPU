@@ -1,7 +1,7 @@
 import logging
 
-import lpu.models.geometric.elkanGGPC
-import lpu.models.geometric.geometric_base
+import LPU.models.geometric.elkanGGPC
+import LPU.models.geometric.geometric_base
 LOG = logging.getLogger(__name__)
 
 
@@ -11,18 +11,18 @@ import numpy as np
 import torch
 
 
-import lpu.constants
-torch.set_default_dtype(lpu.constants.DTYPE)
-import lpu.models
-import lpu.models.lpu_model_base
-import lpu.models.geometric.GVGP
-import lpu.models.geometric.psychmGGPC
+import LPU.constants
+torch.set_default_dtype(LPU.constants.DTYPE)
+import LPU.models
+import LPU.models.lpu_model_base
+import LPU.models.geometric.GVGP
+import LPU.models.geometric.psychmGGPC
 
 
 EPOCH_BLOCKS = 1
 DEVICE = 'cpu'
 
-class ElkanGGPC(lpu.models.geometric.geometric_base.GeometricGPLPUBase):
+class ElkanGGPC(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
     class CustomLikelihood(gpytorch.likelihoods.Likelihood):
         def __init__(self, config, **kwargs):
             super().__init__()

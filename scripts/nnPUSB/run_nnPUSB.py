@@ -5,18 +5,18 @@ import types
 import numpy as np
 import torch.optim
 
-import lpu.external_libs.nnPUSB
-import lpu.external_libs.nnPUSB.nnPU_loss
-import lpu.constants
-import lpu.models.uPU
-import lpu.utils.dataset_utils
-# import lpu.external_libs.nnPUSB.train
-import lpu.utils.utils_general
-import lpu.external_libs.nnPUSB.dataset
-import lpu.models.nnPUSB
-import lpu.utils.plot_utils
+import LPU.external_libs.nnPUSB
+import LPU.external_libs.nnPUSB.nnPU_loss
+import LPU.constants
+import LPU.models.uPU
+import LPU.utils.dataset_utils
+# import LPU.external_libs.nnPUSB.train
+import LPU.utils.utils_general
+import LPU.external_libs.nnPUSB.dataset
+import LPU.models.nnPUSB
+import LPU.utils.plot_utils
 
-torch.set_default_dtype(lpu.constants.DTYPE)
+torch.set_default_dtype(LPU.constants.DTYPE)
 
 USE_DEFAULT_CONFIG = False
 DEFAULT_CONFIG = {
@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
     "gamma": 1.0,
     "learning_rate": 0.001,
     "loss": "sigmoid",
-    "out": "/Users/naji/phd_codebase/lpu/scripts/nnPUSB/checkpoints",
+    "out": "/Users/naji/phd_codebase/LPU/scripts/nnPUSB/checkpoints",
     # "model": 'mlp',
 
     # Dataset configuration
@@ -68,7 +68,7 @@ DEFAULT_CONFIG = {
     # }
 }
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 # Optional dynamic import for Ray
 try:
@@ -84,25 +84,25 @@ def train_model(config=None):
     if config is None:
         config = {}
     # Load the base configuration
-    config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
+    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
-    dataloaders_dict = lpu.utils.dataset_utils.create_dataloaders_dict(config, target_transform=lpu.utils.dataset_utils.one_zero_to_minus_one_one,
-                                                                       label_transform=lpu.utils.dataset_utils.one_zero_to_minus_one_one)
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
+                                                                       label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
     # assuming X always represents the features, and is saved 
     # as a property of the dataset object
     dim = dataloaders_dict['train'].dataset.X.shape[-1]
-    nnPUSB_model = lpu.models.nnPUSB.nnPUSB(config=config, dim=dim)
+    nnPUSB_model = LPU.models.nnPUSB.nnPUSB(config=config, dim=dim)
     nnPUSB_model.set_C(dataloaders_dict['train'])
-    loss = lpu.models.uPU.select_loss(loss_name=config['loss'])
+    loss = LPU.models.uPU.select_loss(loss_name=config['loss'])
     optimizer = torch.optim.Adam([{
         'params': nnPUSB_model.parameters(),
         'lr': config['learning_rate'],
         'weight_decay': 0.005
     }])
     device = config.get('device', 'cpu')
-    loss_func = lpu.external_libs.nnPUSB.nnPU_loss.nnPUSBloss(prior=nnPUSB_model.prior, gamma=config['gamma'], beta=config['beta'])
+    loss_func = LPU.external_libs.nnPUSB.nnPU_loss.nnPUSBloss(prior=nnPUSB_model.prior, gamma=config['gamma'], beta=config['beta'])
     num_epochs = config['num_epochs']
 
     all_scores_dict = {split: {'epochs': []} for split in dataloaders_dict.keys()}
@@ -138,7 +138,7 @@ def train_model(config=None):
     
     scores_dict['test'] = nnPUSB_model.validate(dataloaders_dict['test'], loss_fn=loss_func, model=nnPUSB_model.model)
     # Flatten scores_dict
-    flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:
@@ -156,4 +156,4 @@ def train_model(config=None):
 
 if __name__ == "__main__":
     results, best_epoch = train_model()
-    lpu.utils.plot_utils.plot_scores(results, best_epoch=best_epoch, loss_type='overall_loss')
+    LPU.utils.plot_utils.plot_scores(results, best_epoch=best_epoch, loss_type='overall_loss')

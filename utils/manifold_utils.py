@@ -9,8 +9,8 @@ import scipy.sparse
 import scipy.sparse.linalg
 import torch
 # import tensorflow as tf
-import lpu.utils.matrix_utils as matrix_utils
-import lpu.constants
+import LPU.utils.matrix_utils as matrix_utils
+import LPU.constants
 # from matrix_utils import invert_mat_with_cholesky
 from numpy.linalg import LinAlgError, matrix_power
 DELTA = 1e-16
@@ -19,7 +19,7 @@ from scipy.linalg.lapack import dtrtri
 
 def make_laplacian_moment(L, nu, p):
     if not np.allclose(np.round(p), p):
-        return torch.tensor(np.asarray(scipy.linalg.fractional_matrix_power(L + nu * torch.eye(L.shape[0]), p)), dtype=lpu.constants.DTYPE)
+        return torch.tensor(np.asarray(scipy.linalg.fractional_matrix_power(L + nu * torch.eye(L.shape[0]), p)), dtype=LPU.constants.DTYPE)
     else:
         return torch.matrix_power(L + nu * torch.eye(L.shape[0]), int(p))
     # # Compute eigenvalues and eigenvectors

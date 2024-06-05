@@ -14,20 +14,20 @@ import pandas as pd
 import sklearn.model_selection
 import torch
 
-import lpu.constants
-import lpu.external_libs
-import lpu.external_libs.DEDPUL
-import lpu.external_libs.DEDPUL.algorithms
-import lpu.external_libs.DEDPUL.NN_functions
-import lpu.external_libs.DEDPUL.utils
-import lpu.models.dedpul
-import lpu.models.geometric.elkanGGPC
-import lpu.models.lpu_model_base
+import LPU.constants
+import LPU.external_libs
+import LPU.external_libs.DEDPUL
+import LPU.external_libs.DEDPUL.algorithms
+import LPU.external_libs.DEDPUL.NN_functions
+import LPU.external_libs.DEDPUL.utils
+import LPU.models.dedpul
+import LPU.models.geometric.elkanGGPC
+import LPU.models.lpu_model_base
 
 LOG = logging.getLogger(__name__)
 
 EPSILON = 1e-16
-class nnPU(lpu.models.dedpul.DEDPUL):
+class nnPU(LPU.models.dedpul.DEDPUL):
     """
     Using estimator of p(s|X) to predict p(y|X)
     """

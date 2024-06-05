@@ -3,40 +3,40 @@ import math
 
 import sys
 
-sys.path.append('lpu/external_libs/PU_learning')
-import lpu.scripts.mpe.run_mpe
+sys.path.append('LPU/external_libs/PU_learning')
+import LPU.scripts.mpe.run_mpe
 
-sys.path.append('lpu/external_libs/vpu')
-import lpu.external_libs
-import lpu.external_libs.vpu
-import lpu.external_libs.vpu.dataset
-import lpu.external_libs.vpu.dataset.dataset_avila
-import lpu.external_libs.vpu.dataset.dataset_cifar
-import lpu.external_libs.vpu.dataset.dataset_fashionmnist
-import lpu.external_libs.vpu.dataset.dataset_grid
-import lpu.external_libs.vpu.dataset.dataset_pageblocks
-import lpu.external_libs.vpu.dataset.dataset_stl
-import lpu.external_libs.vpu.model.model_cifar
-import lpu.external_libs.vpu.model.model_fashionmnist
-import lpu.external_libs.vpu.model.model_stl
-import lpu.external_libs.vpu.model.model_vec
-import lpu.external_libs.vpu.data    
+sys.path.append('LPU/external_libs/vpu')
+import LPU.external_libs
+import LPU.external_libs.vpu
+import LPU.external_libs.vpu.dataset
+import LPU.external_libs.vpu.dataset.dataset_avila
+import LPU.external_libs.vpu.dataset.dataset_cifar
+import LPU.external_libs.vpu.dataset.dataset_fashionmnist
+import LPU.external_libs.vpu.dataset.dataset_grid
+import LPU.external_libs.vpu.dataset.dataset_pageblocks
+import LPU.external_libs.vpu.dataset.dataset_stl
+import LPU.external_libs.vpu.model.model_cifar
+import LPU.external_libs.vpu.model.model_fashionmnist
+import LPU.external_libs.vpu.model.model_stl
+import LPU.external_libs.vpu.model.model_vec
+import LPU.external_libs.vpu.data    
 
 from matplotlib import pyplot as plt
 import torch.nn
 import torch.utils.data
 import numpy as np
 
-import lpu.constants
-import lpu.utils.dataset_utils
-import lpu.datasets.LPUDataset
+import LPU.constants
+import LPU.utils.dataset_utils
+import LPU.datasets.LPUDataset
 
-import lpu.models
-import lpu.models.vpu
+import LPU.models
+import LPU.models.vpu
 
-import lpu.utils.auxiliary_models
-import lpu.utils.plot_utils
-import lpu.utils.utils_general
+import LPU.utils.auxiliary_models
+import LPU.utils.plot_utils
+import LPU.utils.utils_general
 
 DEFAULT_CONFIG = {
     "device": "cpu",
@@ -69,12 +69,12 @@ DEFAULT_CONFIG = {
 def get_loaders_by_dataset_name(dataset_name):
     """ Returns the data loader functions based on the dataset name. """
     dataset_to_loader = {
-        'cifar10': lpu.external_libs.vpu.dataset.dataset_cifar.get_cifar10_loaders,
-        'fashionMNIST': lpu.external_libs.vpu.dataset.dataset_fashionmnist.get_fashionMNIST_loaders,
-        'stl10': lpu.external_libs.vpu.dataset.dataset_stl.get_stl10_loaders,
-        'pageblocks': lpu.external_libs.vpu.dataset.dataset_pageblocks.get_pageblocks_loaders,
-        'grid': lpu.external_libs.vpu.dataset.dataset_grid.get_grid_loaders,
-        'avila': lpu.external_libs.vpu.dataset.dataset_avila.get_avila_loaders
+        'cifar10': LPU.external_libs.vpu.dataset.dataset_cifar.get_cifar10_loaders,
+        'fashionMNIST': LPU.external_libs.vpu.dataset.dataset_fashionmnist.get_fashionMNIST_loaders,
+        'stl10': LPU.external_libs.vpu.dataset.dataset_stl.get_stl10_loaders,
+        'pageblocks': LPU.external_libs.vpu.dataset.dataset_pageblocks.get_pageblocks_loaders,
+        'grid': LPU.external_libs.vpu.dataset.dataset_grid.get_grid_loaders,
+        'avila': LPU.external_libs.vpu.dataset.dataset_avila.get_avila_loaders
     }
     return dataset_to_loader.get(dataset_name)
 
@@ -91,7 +91,7 @@ def get_positive_labels(dataset_name):
     }
     return default_labels.get(dataset_name)
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 # Optional dynamic import for Ray
 try:
@@ -106,9 +106,9 @@ def train_model(config=None):
     if config is None:
         config = {}
     # Load the base configuration
-    base_config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    base_config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
+    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
     positive_label_list = get_positive_labels(base_config['dataset_name'])
 
@@ -116,7 +116,7 @@ def train_model(config=None):
     # START: data preparation
     ###########################################################################
     if base_config['dataset_kind'] in ['LPU', 'MPE']:
-        dataloaders_dict = lpu.scripts.mpe.run_mpe.create_dataloaders_dict_mpe(base_config, drop_last=True)
+        dataloaders_dict = LPU.scripts.mpe.run_mpe.create_dataloaders_dict_mpe(base_config, drop_last=True)
     else:
         get_loaders = get_loaders_by_dataset_name(base_config['dataset_name'])
         # TODO: make sure the datasets are balanced coming out of this
@@ -134,7 +134,7 @@ def train_model(config=None):
     ###########################################################################
     lowest_val_var = math.inf  # lowest variational loss on validation set
     highest_test_acc = -1 # highest test accuracy on test set
-    vpu_model = lpu.models.vpu.VPU(config=base_config, input_dim=dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
+    vpu_model = LPU.models.vpu.VPU(config=base_config, input_dim=dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
 
     l_mean = len(dataloaders_dict['train']['PDataset'].dataset) / (len(dataloaders_dict['train']['UDataset'].dataset) + len(dataloaders_dict['train']['PDataset'].dataset))
     lr_phi = base_config['learning_rate']
@@ -194,7 +194,7 @@ def train_model(config=None):
 
 
     # Flatten scores_dict
-    flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:
@@ -212,4 +212,4 @@ if __name__ == "__main__":
     import warnings
     warnings.simplefilter("error", category=UserWarning)
     results, best_epoch = train_model()
-    lpu.utils.plot_utils.plot_scores(results, loss_type='overall_loss', best_epoch=best_epoch)
+    LPU.utils.plot_utils.plot_scores(results, loss_type='overall_loss', best_epoch=best_epoch)

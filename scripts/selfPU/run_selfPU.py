@@ -3,25 +3,25 @@ import copy
 import random
 
 import sys
-sys.path.append('lpu/external_libs/PU_learning')
-sys.path.append('lpu/external_libs/PU_learning/data_helper')
-sys.path.append('lpu/models/selfPU/selfPU')
-import lpu.external_libs.Self_PU
-import lpu.external_libs.Self_PU.cifar_datasets
-import lpu.external_libs.Self_PU.datasets
-import lpu.external_libs.Self_PU.functions
-import lpu.external_libs.Self_PU.mean_teacher
-import lpu.external_libs.Self_PU.mean_teacher.losses
-import lpu.external_libs.Self_PU.meta_models
-import lpu.external_libs.Self_PU.models
-import lpu.external_libs.Self_PU.utils
-import lpu.external_libs.Self_PU.utils.util
+sys.path.append('LPU/external_libs/PU_learning')
+sys.path.append('LPU/external_libs/PU_learning/data_helper')
+sys.path.append('LPU/models/selfPU/selfPU')
+import LPU.external_libs.Self_PU
+import LPU.external_libs.Self_PU.cifar_datasets
+import LPU.external_libs.Self_PU.datasets
+import LPU.external_libs.Self_PU.functions
+import LPU.external_libs.Self_PU.mean_teacher
+import LPU.external_libs.Self_PU.mean_teacher.losses
+import LPU.external_libs.Self_PU.meta_models
+import LPU.external_libs.Self_PU.models
+import LPU.external_libs.Self_PU.utils
+import LPU.external_libs.Self_PU.utils.util
 
 import torchvision
 import torch.backends.cudnn
 
-import lpu.models.selfPU.selfPU
-import lpu.models.selfPU.dataset_utils
+import LPU.models.selfPU.selfPU
+import LPU.models.selfPU.dataset_utils
 
 
 from matplotlib import pyplot as plt
@@ -29,16 +29,16 @@ import torch.nn
 import torch.utils.data
 import numpy as np
 
-import lpu.constants
-import lpu.utils.dataset_utils
-import lpu.datasets.LPUDataset
-import lpu.models.mpe_model
-import lpu.utils.plot_utils
-import lpu.utils.utils_general
+import LPU.constants
+import LPU.utils.dataset_utils
+import LPU.datasets.LPUDataset
+import LPU.models.mpe_model
+import LPU.utils.plot_utils
+import LPU.utils.utils_general
 
 import sklearn.model_selection
 
-LOG = lpu.utils.utils_general.configure_logger(__name__)
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 # Optional dynamic import for Ray
 try:
@@ -80,7 +80,7 @@ DEFAULT_CONFIG = {
     "lr": 0.01,
     "momentum": 0.9,
     "weight_decay": 0.005,
-    "modeldir": "lpu/scripts/selfPU/checkpoints/",
+    "modeldir": "LPU/scripts/selfPU/checkpoints/",
     "epochs": 100,
     "loss": "nnPU",
     "gpu": None,
@@ -117,14 +117,14 @@ def get_criterion(config):
 
     class_weights = class_weights.to(config['device'])
     if config['loss'] == 'Xent':
-        criterion = lpu.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49, loss_fn="Xent")
+        criterion = LPU.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49, loss_fn="Xent")
     elif config['loss'] == 'nnPU':
-        criterion = lpu.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49)
+        criterion = LPU.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49)
     elif config['loss'] == 'Focal':
         class_weights = torch.FloatTensor(weights).to(config['device'])
-        criterion = lpu.external_libs.Self_PU.utils.util.FocalLoss(gamma=0, weight=class_weights, one_hot=False)
+        criterion = LPU.external_libs.Self_PU.utils.util.FocalLoss(gamma=0, weight=class_weights, one_hot=False)
     elif config['loss'] == 'uPU':
-        criterion = lpu.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49, nnPU=False)
+        criterion = LPU.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49, nnPU=False)
     elif config['loss'] == 'Xent_weighted':
         criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 
@@ -171,9 +171,9 @@ def train_model(config=None):
     if config is None:
         config = {}
     # Load the base configuration
-    config = lpu.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    lpu.utils.utils_general.set_seed(lpu.constants.RANDOM_STATE)
+    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
     # torch.manual_seed(config['seed'])
     # if config['seed'] is not None:
     #     random.seed(config['seed'])
@@ -181,11 +181,11 @@ def train_model(config=None):
     #     torch.backends.cudnn.deterministic = True
         
     criterion = get_criterion(config)
-    criterion_meta = lpu.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49, loss_fn="sigmoid_eps")
+    criterion_meta = LPU.external_libs.Self_PU.utils.util.PULoss(Probability_P=0.49, loss_fn="sigmoid_eps")
 
     data_transforms = make_transformations(config['dataset_name'])
     if config['dataset_kind'] == 'SelfPU':
-        (trainX, trainY), (testX, testY) = lpu.models.selfPU.dataset_utils.get_dataset(config['dataset_name'], path=config['datapath'])
+        (trainX, trainY), (testX, testY) = LPU.models.selfPU.dataset_utils.get_dataset(config['dataset_name'], path=config['datapath'])
         # max_size = 5000
         max_size = -1
         trainX = trainX[:max_size]
@@ -196,18 +196,18 @@ def train_model(config=None):
         train_val_ratio = config['ratios']['train'] / (config['ratios']['train'] + config['ratios']['val'])
 
         trainX, valX, trainY, valY = sklearn.model_selection.train_test_split(trainX, trainY, test_size=train_val_ratio)
-        trainY, valY, testY = lpu.models.selfPU.dataset_utils.binarize_class(trainY, valY, testY, dataset_name=config['dataset_name'])
+        trainY, valY, testY = LPU.models.selfPU.dataset_utils.binarize_class(trainY, valY, testY, dataset_name=config['dataset_name'])
 
         n_u_train = len(trainY)# - config['num_p']
         n_u_val = len(valY)# - config['num_p']
         n_u_test = len(testY)# - config['num_p']
         
-        X_train, Y_train, T_train, oids_train, prior_train = lpu.models.selfPU.dataset_utils.make_dataset(trainX=trainX, trainY=trainY, n_labeled=config['num_p'], n_unlabeled=n_u_train)
-        X_val, Y_val, T_val, oids_val, prior_val = lpu.models.selfPU.dataset_utils.make_dataset(trainX=valX, trainY=valY, n_labeled=config['num_p'], n_unlabeled=n_u_val)
-        X_test, Y_test, T_test, oids_test, prior_test = lpu.models.selfPU.dataset_utils.make_dataset(trainX=testX, trainY=testY, n_labeled=config['num_p'], n_unlabeled=n_u_test)
+        X_train, Y_train, T_train, oids_train, prior_train = LPU.models.selfPU.dataset_utils.make_dataset(trainX=trainX, trainY=trainY, n_labeled=config['num_p'], n_unlabeled=n_u_train)
+        X_val, Y_val, T_val, oids_val, prior_val = LPU.models.selfPU.dataset_utils.make_dataset(trainX=valX, trainY=valY, n_labeled=config['num_p'], n_unlabeled=n_u_val)
+        X_test, Y_test, T_test, oids_test, prior_test = LPU.models.selfPU.dataset_utils.make_dataset(trainX=testX, trainY=testY, n_labeled=config['num_p'], n_unlabeled=n_u_test)
     elif config['dataset_kind'] == 'LPU':
-        dataloaders_dict = lpu.utils.dataset_utils.create_dataloaders_dict(config, target_transform=lpu.utils.dataset_utils.one_zero_to_minus_one_one,
-                                                                       label_transform=lpu.utils.dataset_utils.one_zero_to_minus_one_one)
+        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
+                                                                       label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
         
         X_train = dataloaders_dict['train'].dataset.X.detach().cpu().numpy()
         T_train = dataloaders_dict['train'].dataset.y.detach().cpu().numpy()
@@ -229,28 +229,28 @@ def train_model(config=None):
 
     
 
-    dataset_train1_clean = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+    dataset_train1_clean = LPU.models.selfPU.dataset_utils.SelfPUDataset(
         X=X_train, Y=Y_train, T=T_train, oids=oids_train, prior=prior_train, ids=[], increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], top = config['top1'], transform = data_transforms['train'], type="clean")
 
-    dataset_train1_noisy = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+    dataset_train1_noisy = LPU.models.selfPU.dataset_utils.SelfPUDataset(
         X=X_train, Y=Y_train, T=T_train, oids=oids_train, prior=prior_train,
         increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], top = config['top1'], transform = data_transforms['train'], type="noisy")
 
     dataset_train1_noisy.copy(dataset_train1_clean) # 和clean dataset使用相同的随机顺序
     dataset_train1_noisy.reset_ids() # 让初始化的noisy dataset使用全部数据
 
-    dataset_test = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+    dataset_test = LPU.models.selfPU.dataset_utils.SelfPUDataset(
         X=X_test, Y=Y_test, T=T_test, oids=oids_test, prior=prior_test,
         increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], transform = data_transforms['val'], type="clean")
 
-    dataset_val = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+    dataset_val = LPU.models.selfPU.dataset_utils.SelfPUDataset(
         X=X_val, Y=Y_val, T=T_val, oids=oids_val, prior=prior_val,
         increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], transform = data_transforms['val'], type="clean")
-    dataset_train2_noisy = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+    dataset_train2_noisy = LPU.models.selfPU.dataset_utils.SelfPUDataset(
         X=X_train, Y=Y_train, T=T_train, oids=oids_train, prior=prior_train,
         increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], 
         transform = data_transforms['train'], top = config['top2'], type="noisy")
-    dataset_train2_clean = lpu.models.selfPU.dataset_utils.SelfPUDataset(
+    dataset_train2_clean = LPU.models.selfPU.dataset_utils.SelfPUDataset(
         X=X_train, Y=Y_train, T=T_train, oids=oids_train, prior=prior_train,
         increasing=config['increasing'], replacement=config['replacement'], mode=config['self_paced_type'], 
         transform = data_transforms['train'], top = config['top2'], type="clean", ids=[])
@@ -278,8 +278,8 @@ def train_model(config=None):
     dataloader_train2_noisy = torch.utils.data.DataLoader(dataset_train2_noisy, batch_size=config['batch_size']['train'], num_workers=config['workers'], shuffle=False, pin_memory=True)
     dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=config['batch_size']['val'], shuffle=False, pin_memory=True)
     dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=config['batch_size']['test'], shuffle=False, pin_memory=True)
-    consistency_criterion = lpu.external_libs.Self_PU.mean_teacher.losses.softmax_mse_loss
-    selfPU_model = lpu.models.selfPU.selfPU.selfPU(config=config)
+    consistency_criterion = LPU.external_libs.Self_PU.mean_teacher.losses.softmax_mse_loss
+    selfPU_model = LPU.models.selfPU.selfPU.selfPU(config=config)
 
     selfPU_model.model1 = selfPU_model.create_model().to(config['device'])
     selfPU_model.model2 = selfPU_model.create_model().to(config['device'])
@@ -299,7 +299,7 @@ def train_model(config=None):
     optimizer2 = torch.optim.Adam(selfPU_model.model2.parameters(), lr=config['lr'],
                                   weight_decay=config['weight_decay'])
 
-    stats_ = lpu.external_libs.Self_PU.functions.stats(config['modeldir'], 0)
+    stats_ = LPU.external_libs.Self_PU.functions.stats(config['modeldir'], 0)
     #scheduler1 = torch.optim.lr_scheduler.MultiStepLR(optimizer1, milestones=[15, 60], gamma=0.7)
     #scheduler2 = torch.optim.lr_scheduler.MultiStepLR(optimizer2, milestones=[15, 60], gamma=0.7)
     scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer1, config['epochs'])
@@ -346,7 +346,7 @@ def train_model(config=None):
 
             dataloader_train1_clean, dataloader_train1_noisy, dataloader_train2_clean, dataloader_train2_noisy = selfPU_model.update_dataset(selfPU_model.model1, selfPU_model.model2, selfPU_model.ema_model1, selfPU_model.ema_model2, dataset_train1_clean, dataset_train1_noisy, dataset_train2_clean, dataset_train2_noisy, epoch, )
 
-        # lpu.external_libs.Self_PU.functions.plot_curve(stats_, config['modeldir'], 'model', True)
+        # LPU.external_libs.Self_PU.functions.plot_curve(stats_, config['modeldir'], 'model', True)
 
         dataset_train1_noisy.shuffle()
         dataset_train2_noisy.shuffle()
@@ -362,7 +362,7 @@ def train_model(config=None):
     scores_dict['test'] = selfPU_model.validate(dataloader_test, loss_fn=criterion, model=selfPU_model.model1)
 
     # Flatten scores_dict
-    flattened_scores = lpu.utils.utils_general.flatten_dict(scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:
@@ -389,4 +389,4 @@ if __name__ == "__main__":
     import warnings
     warnings.simplefilter("error", category=UserWarning)
     results, best_epoch = train_model()
-    lpu.utils.plot_utils.plot_scores(results, best_epoch=best_epoch)
+    LPU.utils.plot_utils.plot_scores(results, best_epoch=best_epoch)

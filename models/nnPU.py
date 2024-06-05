@@ -7,25 +7,25 @@ pytorch models in this library. That is a future TODO (naji)
 import logging
 import sys
 
-import lpu.models.uPU
-sys.path.append('lpu/external_libs/nnPUSB')
+import LPU.models.uPU
+sys.path.append('LPU/external_libs/nnPUSB')
 
 import numpy as np
 import torch
 import scipy.special
 
-import lpu.constants
-import lpu.external_libs
-import lpu.models.geometric.elkanGGPC
-import lpu.models.lpu_model_base
-import lpu.external_libs.nnPUSB.nnPU_loss
+import LPU.constants
+import LPU.external_libs
+import LPU.models.geometric.elkanGGPC
+import LPU.models.lpu_model_base
+import LPU.external_libs.nnPUSB.nnPU_loss
 
 
 LOG = logging.getLogger(__name__)
 
 EPSILON = 1e-16
 
-# class nnPUloss(lpu.models.uPU.uPUloss):
+# class nnPUloss(LPU.models.uPU.uPUloss):
 #     """Loss function for PU learning."""
 
 #     def __init__(self, prior, loss, gamma=1, beta=0):
@@ -41,7 +41,7 @@ EPSILON = 1e-16
 #         return x_out
 
 
-class nnPU(lpu.models.uPU.uPU):
+class nnPU(LPU.models.uPU.uPU):
     def __init__(self, config, dim=None, **kwargs):
         super(nnPU, self).__init__(config, dim=dim, **kwargs)
         self.select_model()

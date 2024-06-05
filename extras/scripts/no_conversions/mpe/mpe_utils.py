@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-import lpu.external_libs.PU_learning
-import lpu.external_libs.PU_learning.algorithm
-import lpu.external_libs.PU_learning.utils
+import LPU.external_libs.PU_learning
+import LPU.external_libs.PU_learning.algorithm
+import LPU.external_libs.PU_learning.utils
 
 
 def validate(epoch, net, u_validloader, criterion, device, threshold, logistic=True, show_bar=True, separate=False):
@@ -26,7 +26,7 @@ def validate(epoch, net, u_validloader, criterion, device, threshold, logistic=T
 
     if not logistic: 
         # print("here")
-        criterion = lpu.external_libs.PU_learning.algorithm.sigmoid_loss
+        criterion = LPU.external_libs.PU_learning.algorithm.sigmoid_loss
 
     with torch.no_grad():
         for batch_idx, (_, inputs, _, true_targets) in enumerate(u_validloader):
@@ -62,7 +62,7 @@ def validate(epoch, net, u_validloader, criterion, device, threshold, logistic=T
                 neg_total += len(neg_idx)
 
             if show_bar: 
-                lpu.external_libs.PU_learning.utils.progress_bar(batch_idx, len(u_validloader) , 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                LPU.external_libs.PU_learning.utils.progress_bar(batch_idx, len(u_validloader) , 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                     % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
     
     if not separate: 
@@ -120,7 +120,7 @@ def train(epoch, net, p_trainloader, u_trainloader, optimizer, criterion, device
         y_probs.extend(outputs[:,0].cpu().numpy())
         y_ests.extend(predicted.cpu().numpy())
         if show_bar: 
-            lpu.external_libs.PU_learning.utils.progress_bar(batch_idx, len(p_trainloader) + len(u_trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+            LPU.external_libs.PU_learning.utils.progress_bar(batch_idx, len(p_trainloader) + len(u_trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
         
 
@@ -180,7 +180,7 @@ def train_PU_discard(epoch, net,  p_trainloader, u_trainloader, optimizer, crite
         correct += np.sum(correct_preds)
 
         if show_bar:
-            lpu.external_libs.PU_learning.utils.progress_bar(batch_idx, len(p_trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+            LPU.external_libs.PU_learning.utils.progress_bar(batch_idx, len(p_trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
     return 100.*correct/total
