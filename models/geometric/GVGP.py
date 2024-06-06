@@ -11,7 +11,7 @@ import LPU.utils.matrix_utils
 class GeometricVGP(gpytorch.models.ApproximateGP):
     def __init__(self, inducing_points, intrinsic_kernel_params):
         self.intrinsic_kernel_params = intrinsic_kernel_params
-        variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(inducing_points.size(0))
+        variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(inducing_points.size(0), )
         # variational_strategy = gpytorch.variational.BatchDecoupledVariationalStrategy(self, inducing_points, variational_distribution, learn_inducing_locations=True)
         variational_strategy = gpytorch.variational.VariationalStrategy(self, inducing_points, variational_distribution, learn_inducing_locations=True)
         super(GeometricVGP, self).__init__(variational_strategy)

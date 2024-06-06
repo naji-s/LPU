@@ -80,6 +80,7 @@ class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
         # creating the geometric VGP gp_model
         intrinsic_kernel_params = self._create_intrinsinc_kernel_params_from_config(
         )
+
         self.gp_model = LPU.models.geometric.GVGP.GeometricVGP(
             inducing_points=self.inducing_points,
             intrinsic_kernel_params=intrinsic_kernel_params).to(self.device)
@@ -115,37 +116,37 @@ class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
         l_batch_concat_est = []
         y_batch_concat_est = []
 
-            
-        for batch_idx, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
-            X_batch.to(self.device)
-            l_batch.to(self.device)
-            LOG.debug(f"Batch {batch_idx} is being processed now")
-            optimizer.zero_grad()
-            self.likelihood.update_input_data(X_batch)
-            self.gp_model.update_input_data(X_batch)
-            f_x = self.gp_model(X_batch)
-            loss = self.loss_fn(f_x, l_batch)
-            num_of_batches += 1
-            
-            y_batch_prob = self.predict_prob_y_given_X(f_x=f_x)
-            l_batch_prob = self.predict_proba(X=X_batch, f_x=f_x)
-            y_batch_est = self.predict_y_given_X(f_x=f_x)
-            l_batch_est = self.predict(X=X_batch, f_x=f_x)
+        with gpytorch.settings.cholesky_max_tries(10):
+            for batch_idx, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
+                X_batch.to(self.device)
+                l_batch.to(self.device)
+                LOG.debug(f"Batch {batch_idx} is being processed now")
+                optimizer.zero_grad()
+                self.likelihood.update_input_data(X_batch)
+                self.gp_model.update_input_data(X_batch)
+                f_x = self.gp_model(X_batch)
+                loss = self.loss_fn(f_x, l_batch)
+                num_of_batches += 1
+                
+                y_batch_prob = self.predict_prob_y_given_X(f_x=f_x)
+                l_batch_prob = self.predict_proba(X=X_batch, f_x=f_x)
+                y_batch_est = self.predict_y_given_X(f_x=f_x)
+                l_batch_est = self.predict(X=X_batch, f_x=f_x)
 
-            if isinstance(y_batch_prob, np.ndarray):
-                y_batch_prob = torch.tensor(y_batch_prob, dtype=LPU.constants.DTYPE)
-                l_batch_prob = torch.tensor(l_batch_prob, dtype=LPU.constants.DTYPE)
-                y_batch_est = torch.tensor(y_batch_est, dtype=LPU.constants.DTYPE)
-                l_batch_est = torch.tensor(l_batch_est, dtype=LPU.constants.DTYPE)
-            loss.backward()
-            overrall_loss += loss.item()
-            optimizer.step()
-            l_batch_concat.append(l_batch.detach().cpu().numpy())
-            y_batch_concat.append(y_batch.detach().cpu().numpy())
-            y_batch_concat_prob.append(y_batch_prob.detach().cpu().numpy())
-            l_batch_concat_prob.append(l_batch_prob.detach().cpu().numpy())
-            y_batch_concat_est.append(y_batch_est.detach().cpu().numpy())
-            l_batch_concat_est.append(l_batch_est.detach().cpu().numpy())
+                if isinstance(y_batch_prob, np.ndarray):
+                    y_batch_prob = torch.tensor(y_batch_prob, dtype=LPU.constants.DTYPE)
+                    l_batch_prob = torch.tensor(l_batch_prob, dtype=LPU.constants.DTYPE)
+                    y_batch_est = torch.tensor(y_batch_est, dtype=LPU.constants.DTYPE)
+                    l_batch_est = torch.tensor(l_batch_est, dtype=LPU.constants.DTYPE)
+                loss.backward()
+                overrall_loss += loss.item()
+                optimizer.step()
+                l_batch_concat.append(l_batch.detach().cpu().numpy())
+                y_batch_concat.append(y_batch.detach().cpu().numpy())
+                y_batch_concat_prob.append(y_batch_prob.detach().cpu().numpy())
+                l_batch_concat_prob.append(l_batch_prob.detach().cpu().numpy())
+                y_batch_concat_est.append(y_batch_est.detach().cpu().numpy())
+                l_batch_concat_est.append(l_batch_est.detach().cpu().numpy())
 
         y_batch_concat_prob = np.concatenate(y_batch_concat_prob)
         l_batch_concat_prob = np.concatenate(l_batch_concat_prob)
