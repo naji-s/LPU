@@ -2,6 +2,8 @@ import logging
 
 import LPU.models.geometric.elkanGGPC
 import LPU.models.geometric.geometric_base
+import LPU.utils.manifold_utils
+
 LOG = logging.getLogger(__name__)
 
 

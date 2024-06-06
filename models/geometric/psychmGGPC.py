@@ -22,6 +22,7 @@ import LPU.models.geometric.psychmGGPC
 import LPU.utils.dataset_utils
 import LPU.models.geometric.GVGP
 import LPU.utils.utils_general  
+import LPU.utils.manifold_utils
 
 # Set up logging configuration
 # logging.basicConfig(level=logging.INFO)  # Set the logging level as per your requirement
@@ -31,6 +32,7 @@ LOG = LPU.utils.utils_general.configure_logger(__name__)
  
 
 class PsychMGP(LPU.models.geometric.geometric_base.GeometricGPLPUBase): 
+    
     class CustomLikelihood(gpytorch.likelihoods.Likelihood):
         SCALE = 1.
         def __init__(self, config=None, num_features=None, warm_start_params=None, is_SPM=False, *args, **kwargs):
@@ -104,6 +106,7 @@ class PsychMGP(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
             # self.sigmoid = torch.nn.Sigmoid()
             # self.softmax = torch.nn.Softmax(0)
             # self.L_param = torch.nn.Parameter(torch.randn(num_features, num_features))
+
         def update_input_data(self, X):
             self.X = X
 

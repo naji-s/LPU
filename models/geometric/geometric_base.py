@@ -13,6 +13,7 @@ import LPU.constants
 import LPU.models.geometric.GVGP
 import LPU.models.lpu_model_base
 import LPU.utils.utils_general
+import LPU.utils.manifold_utils
 
 DEVICE = 'cpu'
 EPOCH_BLOCKS = 1
@@ -38,7 +39,6 @@ class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
     class CustomLikelihood(gpytorch.likelihoods.Likelihood, metaclass=abc.ABCMeta):
         def __init__(self, config, **kwargs):
             super().__init__()
-            # Rest of the code...
 
         @abc.abstractmethod
         def forward(self, function_samples, **kwargs):
@@ -52,6 +52,7 @@ class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
         super().__init__()
         self.config = config
         self.device = config.get('device', DEVICE)
+        self.cholesky_max_tries = config.get('cholesky_max_tries', 10)
         duplicate_keys = set(config.keys()) & set(kwargs.keys())
         if duplicate_keys:
             raise ValueError(f"Duplicate arguments have been set through both keyword arguments and the config file: {duplicate_keys}")
@@ -78,12 +79,12 @@ class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
             )
 
         # creating the geometric VGP gp_model
-        intrinsic_kernel_params = self._create_intrinsinc_kernel_params_from_config(
+        self.intrinsic_kernel_params = self._create_intrinsinc_kernel_params_from_config(
         )
 
         self.gp_model = LPU.models.geometric.GVGP.GeometricVGP(
             inducing_points=self.inducing_points,
-            intrinsic_kernel_params=intrinsic_kernel_params).to(self.device)
+            intrinsic_kernel_params=self.intrinsic_kernel_params).to(self.device)
         self.likelihood = self.CustomLikelihood(config, **kwargs).to(DEVICE).to(dtype=LPU.constants.DTYPE)
         self.mll = gpytorch.mlls.PredictiveLogLikelihood(
             self.likelihood,
@@ -116,7 +117,7 @@ class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
         l_batch_concat_est = []
         y_batch_concat_est = []
 
-        with gpytorch.settings.cholesky_max_tries(10):
+        with gpytorch.settings.cholesky_max_tries(self.cholesky_max_tries):
             for batch_idx, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
                 X_batch.to(self.device)
                 l_batch.to(self.device)

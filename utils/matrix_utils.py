@@ -4,8 +4,8 @@ import numpy as np
 import scipy.linalg.lapack 
 import torch
 
-import LPU.constants as constants
-import LPU.utils.manifold_utils as manifold_utils
+import LPU.constants
+import LPU.utils.manifold_utils
 # import matrix_utils
 EPSILON = 1e-8
 
@@ -124,10 +124,11 @@ class ModifiedKernel(gpytorch.kernels.Kernel):
 
         # K_DD = K_DD * 1e-6
 
-        # self.register_buffer("M", M)
+        # self.register_buffer("M", torch.zeros(D.size(0), D.size(0), dtype=LPU.constants.DTYPE))
         # self.register_buffer("K_DD", K_DD)
         # self.M_outputscale = NormalPrior(10., 0.1)
-        self.M_outputscale = torch.tensor(self.intrinsic_kernel_params['amplitude'], dtype=constants.DTYPE)#torch.nn.Parameter(torch.zeros(1))# NormalPrior(0.2, .01)
+        self.M_outputscale = torch.tensor(self.intrinsic_kernel_params['amplitude'], dtype=LPU.constants.DTYPE)#torch.nn.Parameter(torch.zeros(1))# NormalPrior(0.2, .01)
+
         # self.M_outputscale = torch.nn.Parameter(torch.zeros(1)-1)
         # self.D = D
 
@@ -144,14 +145,17 @@ class ModifiedKernel(gpytorch.kernels.Kernel):
         # self.register_buffer("K_DD", K_DD)
         # M_inv_plus_K_DD__inv = invert_psd_matrix_torch(self.M_inv * self.M_outputscale ** 2 + self.K_DD).detach()
         # self.register_buffer("M_inv_plus_K_DD__inv", M_inv_plus_K_DD__inv)
+
     def update_input_data(self, X):
         self.X = X
+        W = LPU.utils.manifold_utils.build_W_torch(X, k_neighbours=self.intrinsic_kernel_params['n_neighbor'], lengthscale=self.intrinsic_kernel_params['lengthscale'], connectivity=self.intrinsic_kernel_params['neighbor_mode'])
+        self.M, _= LPU.utils.manifold_utils.build_manifold_mat(W, self.intrinsic_kernel_params)
 
     def forward(self, x1, x2, diag=None, **params):
         """
         Compute the kernel function between x1 and x2.
         """
-        length = torch.tensor(1., dtype=constants.DTYPE)
+        length = torch.tensor(1., dtype=LPU.constants.DTYPE)
         K_x1_x2 = self.main_kernel(x1, x2) / length 
 
         K_X_x1 = self.main_kernel(self.X, x1) / length 
@@ -162,13 +166,12 @@ class ModifiedKernel(gpytorch.kernels.Kernel):
         ############################################################################################################
         # as part of regulariziation beside smoothness with respect to the manifold
         # D_tilde = find_closest_differentiable(self.D, self.X)
-        # W = manifold_utils.build_W_torch(D_tilde, k_neighbours=self.intrinsic_kernel_params['n_neighbor'], lengthscale=self.intrinsic_kernel_params['lengthscale'], connectivity=self.intrinsic_kernel_params['neighbor_mode'])
-        # self.M, _= manifold_utils.build_manifold_mat(W, self.intrinsic_kernel_params)
+        # W = LPU.utils.manifold_utils.build_W_torch(D_tilde, k_neighbours=self.intrinsic_kernel_params['n_neighbor'], lengthscale=self.intrinsic_kernel_params['lengthscale'], connectivity=self.intrinsic_kernel_params['neighbor_mode'])
+        # self.M, _= LPU.utils.manifold_utils.build_manifold_mat(W, self.intrinsic_kernel_params)
         # self.M += torch.diag(torch.linalg.norm(self.D - D_tilde, dim=1) ** 2)
-        W = manifold_utils.build_W_torch(self.X, k_neighbours=self.intrinsic_kernel_params['n_neighbor'], lengthscale=self.intrinsic_kernel_params['lengthscale'], connectivity=self.intrinsic_kernel_params['neighbor_mode'])
-        self.M, _= manifold_utils.build_manifold_mat(W, self.intrinsic_kernel_params)
 
         self.K_XX = self.main_kernel(self.X, self.X).evaluate().detach()
+
         if self.intrinsic_kernel_params['invert_M_first']:
             self.M_inv = invert_psd_matrix_torch(self.M)
             self.M = self.M * self.M_outputscale ** 2
@@ -176,7 +179,10 @@ class ModifiedKernel(gpytorch.kernels.Kernel):
             self.M_inv_plus_K_XX__inv = invert_psd_matrix_torch(self.M_inv / self.M_outputscale ** 2 + self.K_XX)
         else:
             self.M = self.M * self.M_outputscale ** 2
-            self.M_inv_plus_K_XX__inv = torch.linalg.solve(torch.eye(self.M.size(0), device=self.M.device) + torch.matmul(self.M, self.K_XX), self.M)
+            if torch.abs(self.M_outputscale) >= LPU.constants.EPSILON:
+                self.M_inv_plus_K_XX__inv = torch.linalg.solve(torch.eye(self.M.size(0), device=self.M.device) + torch.matmul(self.M, self.K_XX), self.M)
+            else:
+                self.M_inv_plus_K_XX__inv = torch.zeros_like(self.M, device=self.M.device)
             # print ("M_inv_plus_K_DD__inv?", torch.isnan(self.M_inv_plus_K_DD__inv).any())
     
         # self.M_inv_plus_K_DD__inv.register_hook(lambda grad: print("Gradient of M_inv_plus_K_DD__inv:", torch.isnan(grad).any()))

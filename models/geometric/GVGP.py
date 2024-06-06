@@ -31,7 +31,7 @@ class GeometricVGP(gpytorch.models.ApproximateGP):
     def update_input_data(self, X):
         self.covar_module.update_input_data(X)
 
-    def forward(self, x):
+    def forward(self, x, M=None, **kwargs):
         covar_x = self.covar_module(x)
         self.x = x
         mean_x = self.mean_module(x)
