@@ -62,6 +62,7 @@ def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
             "test_y_accuracy": best_trial.last_result["test_y_accuracy"],
             "test_y_APS": best_trial.last_result["test_y_APS"]}
     }
+    print (json.dumps(best_trial_report, indent=4))
     return best_trial_report
 
 if __name__ == "__main__":
