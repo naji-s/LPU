@@ -6,12 +6,12 @@ import LPU.scripts
 import LPU.scripts.tice
 import LPU.scripts.tice.run_tice
 
-def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
+def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None):
     # Configuration for hyperparameters to be tuned
     search_space = {
         "inducing_points_size": ray.tune.choice([16, 32, 64]),
         "learning_rate": ray.tune.loguniform(1e-4, 1e-1),
-        "num_epochs": ray.tune.choice(range(5, max_num_epochs)),
+        "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "batch_size": {
             "train": ray.tune.choice([32, 64, 128]),
             "test": ray.tune.choice([32, 64, 128]),

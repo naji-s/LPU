@@ -5,11 +5,11 @@ import ray.train
 
 import LPU.scripts.uPU.run_uPU
 
-def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
+def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None):
     # Configuration for hyperparameters to be tuned
     search_space = {
         "learning_rate": ray.tune.loguniform(1e-4, 1e-1),
-        "epoch": ray.tune.choice(range(5, max_num_epochs)),
+        "epoch": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "gamma": ray.tune.uniform(0.1, 1.0),
         "beta": ray.tune.uniform(0.0, 1.0),
         "loss": ray.tune.choice(['sigmoid']),

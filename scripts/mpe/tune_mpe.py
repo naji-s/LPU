@@ -8,14 +8,14 @@ import ray.train
 
 import LPU.scripts.mpe.run_mpe
 
-def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
+def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None):
     # Configuration for hyperparameters to be tuned
     search_space = {
         "lr": ray.tune.loguniform(1e-4, 1e-1),
         "momentum": ray.tune.uniform(0.1, 0.9),
         "wd": ray.tune.loguniform(1e-6, 1e-2),
-        "warm_start_epochs": ray.tune.choice([5, 10, 20]),
-        "epochs": ray.tune.choice(range(5, max_num_epochs)),
+        "warm_start_epochs": ray.tune.choice([10, 20, 50]),
+        "epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "alpha": ray.tune.uniform(0.3, 0.7),
         "beta": ray.tune.uniform(0.3, 0.7),
         "train_method": ray.tune.choice(["TEDn", "alternative"]),

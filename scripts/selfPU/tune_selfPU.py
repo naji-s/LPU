@@ -6,12 +6,12 @@ import LPU.scripts
 import LPU.scripts.selfPU
 import LPU.scripts.selfPU.run_selfPU
 
-def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
+def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None):
     # Configuration for hyperparameters to be tuned
     search_space = {
         "lr": ray.tune.loguniform(1e-4, 1e-1),
         "weight_decay": ray.tune.loguniform(1e-6, 1e-3),
-        "epochs": ray.tune.randint(5, max_num_epochs),
+        "epochs": ray.tune.randint(max_num_epochs, max_num_epochs + 1),
         "weight": ray.tune.uniform(0.5, 2.0),
         "self_paced_start": ray.tune.randint(5, 20),
         "self_paced_stop": ray.tune.randint(5, max_num_epochs),

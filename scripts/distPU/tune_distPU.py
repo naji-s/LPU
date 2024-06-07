@@ -8,29 +8,23 @@ import LPU.scripts
 import LPU.scripts.distPU
 import LPU.scripts.distPU.run_distPU
 
-def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
+def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None):
     search_space = {
         "warm_up_lr": ray.tune.loguniform(1e-4, 1e-1),
-        "lr": ray.tune.loguniform(1e-4, 1e-1),
-        "warm_up_weight_decay": ray.tune.loguniform(1e-6, 1e-2),
-        "weight_decay": ray.tune.loguniform(1e-6, 1e-2),
-        "warm_up_epochs": ray.tune.choice(range(5, max_num_epochs, 5)),
-        "pu_epochs": ray.tune.choice(range(5, max_num_epochs, 5)),
+        "lr": ray.tune.loguniform(1e-3, 1e-1),
+        # "warm_up_weight_decay": ray.tune.loguniform(1e-6, 1e-2),
+        # "weight_decay": ray.tune.loguniform(1e-6, 1e-2),        
+        "pu_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
+        "warm_up_epochs": ray.tune.choice([10, 20, 50]),
         "co_entropy": ray.tune.uniform(0.001, 0.01),
         "num_labeled": ray.tune.choice([1000, 5000, 10000]),
-        "optimizer": ray.tune.choice(['adam', 'sgd']),
-        "schedular": ray.tune.choice(['cos-ann', 'step']),
+        "optimizer": ray.tune.choice(['adam']),
+        # "schedular": ray.tune.choice(['cos-ann', 'step']),
         "entropy": ray.tune.uniform(0.1, 1.0),
         "co_mu": ray.tune.uniform(0.001, 0.01),
         "alpha": ray.tune.uniform(3.0, 9.0),
         "co_mix_entropy": ray.tune.uniform(0.01, 0.1),
         "co_mixup": ray.tune.uniform(2.0, 10.0),
-        "ratios": {
-            "test": ray.tune.uniform(0.1, 0.3),
-            "val": ray.tune.uniform(0.1, 0.3),
-            "holdout": ray.tune.uniform(0.05, 0.1),
-            "train": ray.tune.uniform(0.3, 0.5)
-        },
     }
 
     reporter = ray.tune.CLIReporter(metric_columns=[

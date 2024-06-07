@@ -10,7 +10,7 @@ def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None)
     # Configuration for hyperparameters to be tuned
     search_space = {
         "learning_rate": ray.tune.loguniform(1e-5, 1e-3),
-        "epochs": ray.tune.choice(range(5, max_num_epochs)),
+        "epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "batch_size": {
             "train": ray.tune.choice([32, 64, 128]),
         },

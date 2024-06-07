@@ -7,18 +7,14 @@ import LPU.scripts
 import LPU.scripts.dedpul
 import LPU.scripts.dedpul.run_dedpul
 
-def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
+def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None):
     search_space = {
         "learning_rate": ray.tune.loguniform(1e-4, 1e-1),
-        "batch_size": {
-            "train": ray.tune.choice([16, 32, 64]),
-        },
-        "num_epochs": ray.tune.choice(range(5, max_num_epochs)),
-        "evaluation_interval": ray.tune.choice([1, 5, 10]),
-        "epoch_blocks": ray.tune.choice([1, 2, 3]),
+        # "batch_size": {
+        #     "train": ray.tune.choice([16, 32, 64]),
+        # },
+        "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "nrep": ray.tune.choice([5, 10, 20]),
-        "dedpul_type": ray.tune.choice(['dedpul', 'dedpul_advanced']),
-        "cv": ray.tune.choice([3, 5, 10]),
         "estimate_diff_options": {
             "MT": ray.tune.choice([True, False]),
             "MT_coef": ray.tune.uniform(0.1, 0.5),
@@ -29,7 +25,7 @@ def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
             "n_gauss_pos": ray.tune.choice([5, 10, 15]),
             "bins_mix": ray.tune.choice([10, 20, 30]),
             "bins_pos": ray.tune.choice([10, 20, 30]),
-            "k_neighbours": ray.tune.choice([None, 5, 10])
+            "k_neighbours": ray.tune.choice([5, 10])
         },
         "base_config_file_path": "/Users/naji/phd_codebase/LPU/configs/dedpul_config.yaml"
     }
