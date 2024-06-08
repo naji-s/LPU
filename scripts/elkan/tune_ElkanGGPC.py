@@ -6,10 +6,10 @@ import ray.train
 import LPU.scripts
 import LPU.scripts.elkan.run_ElkanGGPC
 
-def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
+def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None):
     search_space = {
         "inducing_points_size": ray.tune.choice([16, 32, 64]),
-        "num_epochs": ray.tune.choice(range(5, max_num_epochs)),
+        "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "intrinsic_kernel_params": {
             "normed": ray.tune.choice([True, False]),
             "kernel_type": ray.tune.choice(["laplacian"]),

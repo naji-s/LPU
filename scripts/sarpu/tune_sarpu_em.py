@@ -6,10 +6,10 @@ import LPU.scripts
 import LPU.scripts.sarpu
 import LPU.scripts.sarpu.run_sarpu_em
 
-def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
+def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None):
     # Configuration for hyperparameters to be tuned
     search_space = {
-        "num_epochs": ray.tune.choice(range(5, max_num_epochs)),
+        "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "SAR_PU_classification_model": ray.tune.choice(['logistic']),
         "svm_params": {
             "tol": ray.tune.loguniform(1e-5, 1e-3),
@@ -25,7 +25,7 @@ def main(num_samples=1, max_num_epochs=10, gpus_per_trial=0, results_dir=None):
             "C": ray.tune.loguniform(0.1, 10),
             "fit_intercept": ray.tune.choice([True, False]),
             "solver": ray.tune.choice(['lbfgs']),
-            "max_iter": ray.tune.choice(range(5, max_num_epochs)),
+            "max_iter": ray.tune.choice([-1, 1000, 2000, 5000]),
         },
     }
 

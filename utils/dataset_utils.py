@@ -112,7 +112,11 @@ def index_group_split(index_arr=None, ratios_dict=None, random_state=None, strat
         else:
             strat_arr_split = strat_arr[index_arr]
 
-        if not np.allclose(new_ratio, 1.):
+        # when ratio for a split is zero
+        if np.abs(new_ratio) < LPU.constants.EPSILON:
+            continue
+         # when ratio for a split is one
+        elif np.abs(new_ratio - 1) >= LPU.constants.EPSILON:
             indices_dict[key], index_arr = sklearn.model_selection.train_test_split(
                 index_arr,
                 train_size=new_ratio,
@@ -120,9 +124,9 @@ def index_group_split(index_arr=None, ratios_dict=None, random_state=None, strat
                 random_state=random_state,
                 stratify=strat_arr_split
             )    
+        # otherwise
         else:
-            indices_dict[key] = index_arr
-        past_ratio = past_ratio - ratio        
+            past_ratio = past_ratio - ratio        
     return indices_dict
 
 def make_data_loader(dataset, batch_size, sampler=None, drop_last=False):

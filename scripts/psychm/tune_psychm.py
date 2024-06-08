@@ -9,24 +9,24 @@ import LPU.scripts.psychm.run_psychm
 def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None):
     # Configuration for hyperparameters to be tuned
     search_space = {
-        "inducing_points_size": ray.tune.choice([32, 64]),
-        "learning_rate": ray.tune.loguniform(1e-4, 1e-1),
-        "num_epochs": ray.tune.choice(range(5, max_num_epochs)),
+        "inducing_points_size": ray.tune.choice([64]),
+        "learning_rate": ray.tune.loguniform(1e-3 * 2, 1e-2 * 2),
+        "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "intrinsic_kernel_params": {
             "normed": ray.tune.choice([True, False]),
             "noise_factor": ray.tune.uniform(0, 0.1),
             "amplitude": ray.tune.uniform(0.1, 1),
             "n_neighbor": ray.tune.randint(5, 10),
-            "lengthscale": ray.tune.loguniform(1e-2, 1),
+            "lengthscale": ray.tune.loguniform(1e-2, 1), 
             "neighbor_mode": ray.tune.choice(['connectivity', 'distance']),
             "power_factor": ray.tune.randint(1, 3),
         },
-        "batch_size": {
-            "train": ray.tune.choice([32, 64, 128]),
-            "test": ray.tune.choice([32, 64, 128]),
-            "val": ray.tune.choice([32, 64, 128]),
-            "holdout": ray.tune.choice([32, 64, 128])
-        },
+        # "batch_size": {
+        #     "train": ray.tune.choice([32, 64, 128]),
+        #     "test": ray.tune.choice([32, 64, 128]),
+        #     "val": ray.tune.choice([32, 64, 128]),
+        #     "holdout": ray.tune.choice([32, 64, 128])
+        # },
     }
 
     reporter = ray.tune.CLIReporter(metric_columns=[
