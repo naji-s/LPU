@@ -163,35 +163,35 @@ def build_manifold_mat(W, manifold_kernel_info):
 
 
 
-# def build_W(features, k_neighbours, lengthscale, connectivity):
+def build_W(features, k_neighbours, lengthscale, connectivity):
     
-#     try:
-#         if connectivity=='connectivity':
-#             W = kneighbors_graph(features, k_neighbours, mode='connectivity', include_self=False)
-#             W = (((W + W.T) > 0) * 1.)
-#             W.data = np.squeeze(W.data) / (2 * lengthscale ** 2)
+    try:
+        if connectivity=='connectivity':
+            W = kneighbors_graph(features, k_neighbours, mode='connectivity', include_self=False)
+            W = (((W + W.T) > 0) * 1.)
+            W.data = np.squeeze(W.data) / (2 * lengthscale ** 2)
 
-#         elif connectivity=='distance':
-#             # if type(features).__name__ != 'ndarray':
-#                 # if tf.keras.backend.shape(features)[0] >= 1:
-#                 #     features = features.numpy()
-#             W = kneighbors_graph(features, k_neighbours, mode='distance',include_self=False)
-#             W = W.maximum(W.T)
-#             W.data = np.square(W.data).ravel() 
-#             W.data = np.squeeze(W.data) / (2 * lengthscale ** 2)
-#             W.data = tf.math.exp(-W.data).numpy()
-#             W.data = np.nan_to_num(W.data)
+        elif connectivity=='distance':
+            # if type(features).__name__ != 'ndarray':
+                # if tf.keras.backend.shape(features)[0] >= 1:
+                #     features = features.numpy()
+            W = kneighbors_graph(features, k_neighbours, mode='distance',include_self=False)
+            W = W.maximum(W.T)
+            W.data = np.square(W.data).ravel() 
+            W.data = np.squeeze(W.data) / (2 * lengthscale ** 2)
+            W.data = tf.math.exp(-W.data).numpy()
+            W.data = np.nan_to_num(W.data)
 
-#     except Exception as e:
-#         raise type(e)(str(e) + 'error is in kneighbors_graph')
+    except Exception as e:
+        raise type(e)(str(e) + 'error is in kneighbors_graph')
 
-#     # THE SPARSE CASE USING TENSORFLOW. k_nn_graph IMPLEMENTATION CURRENTLY IS BROKEN
-#     # W = k_nn_graph(features, k=self.manifold_kernel_k, mode=self.opt['neighbor_mode'], include_self=False)
-#     # W = tf.sparse.maximum(W, tf.sparse.transpose(W))
-#     # W = convert_sparse_tensor_to_csr_matrix(W
-#     # checking for floating point error
+    # THE SPARSE CASE USING TENSORFLOW. k_nn_graph IMPLEMENTATION CURRENTLY IS BROKEN
+    # W = k_nn_graph(features, k=self.manifold_kernel_k, mode=self.opt['neighbor_mode'], include_self=False)
+    # W = tf.sparse.maximum(W, tf.sparse.transpose(W))
+    # W = convert_sparse_tensor_to_csr_matrix(W
+    # checking for floating point error
 
-#     return W
+    return W
 
 def calculate_L_p_kernel(Lap_mat, manifold_kernel_noise, manifold_kernel_power, 
                          manifold_kernel_amplitude, use_eigsh=False, return_inverse=False):
