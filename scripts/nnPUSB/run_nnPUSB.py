@@ -105,7 +105,7 @@ def train_model(config=None):
         'weight_decay': 0.005
     }])
     device = config.get('device', 'cpu')
-    loss_func = LPU.external_libs.nnPUSB.nnPU_loss.nnPUSBloss(prior=nnPUSB_model.prior, gamma=config['gamma'], beta=config['beta'])
+    loss_fn = LPU.external_libs.nnPUSB.nnPU_loss.nnPUSBloss(prior=nnPUSB_model.prior, gamma=config['gamma'], beta=config['beta'])
     num_epochs = config['num_epochs']
 
     all_scores_dict = {split: {'epochs': []} for split in dataloaders_dict.keys()}
@@ -116,10 +116,10 @@ def train_model(config=None):
     best_scores_dict = None
     best_model_state = copy.deepcopy(nnPUSB_model.state_dict())
     for epoch in range(num_epochs):
-        scores_dict['train'] = nnPUSB_model.train_one_epoch(dataloader=dataloaders_dict['train'], optimizer=optimizer, loss_fn=loss_func, device=device)
+        scores_dict['train'] = nnPUSB_model.train_one_epoch(dataloader=dataloaders_dict['train'], optimizer=optimizer, loss_fn=loss_fn, device=device)
         all_scores_dict['train']['epochs'].append(epoch)
 
-        scores_dict['val'] = nnPUSB_model.validate(dataloaders_dict['val'], loss_fn=loss_func, model=nnPUSB_model.model)
+        scores_dict['val'] = nnPUSB_model.validate(dataloaders_dict['val'], loss_fn=loss_fn, model=nnPUSB_model.model)
         all_scores_dict['val']['epochs'].append(epoch)
 
         for split in dataloaders_dict.keys():
@@ -144,7 +144,7 @@ def train_model(config=None):
     # Evaluate on the test set with the best model based on the validation set
     model.load_state_dict(best_model_state)
 
-    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=model.loss_fn, model=model.model)
+    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=loss_fn, model=model.model)
 
     # Flatten scores_dict
     flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)

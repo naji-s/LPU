@@ -66,10 +66,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        "test": 0.25,
-        "val": 0.1,
+        "test": 0.3,
+        "val": 0.,
         "holdout": 0.0,
-        "train": 0.65
+        "train": 0.7
     },
     "batch_size": {
         "train": None,
@@ -114,10 +114,12 @@ def train_model(config=None):
     scores_dict = {split: {} for split in ['train', 'val']}
 
     scores_dict['train'] = sarpu_em_model.train(dataloaders_dict['train'])
-    scores_dict['val'] = sarpu_em_model.validate(dataloaders_dict['val'], loss_fn=sarpu_em_model.loss_fn)
+    if 'val' in dataloaders_dict:
+        scores_dict['val'] = sarpu_em_model.validate(dataloaders_dict['val'], loss_fn=sarpu_em_model.loss_fn)
 
     for split in ['train', 'val']:
-        all_scores_dict[split].update(scores_dict[split])
+        if 'val' in dataloaders_dict and split == 'val':
+            all_scores_dict[split].update(scores_dict[split])
 
     # Evaluate on the test set after training
     scores_dict['test'] = sarpu_em_model.validate(dataloaders_dict['test'], loss_fn=sarpu_em_model.loss_fn)

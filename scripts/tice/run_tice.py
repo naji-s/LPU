@@ -51,8 +51,8 @@ DEFAULT_CONFIG = {
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
         'test': 0.25,
-        'val': 0.1,
-        'holdout': .0,
+        'val': 0.05,
+        'holdout': .05,
         'train': .65, 
     },
 

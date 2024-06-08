@@ -14,7 +14,7 @@ USE_DEFAULT_CONFIG = False
 DEFAULT_CONFIG = {
     "inducing_points_size": 32,
     "learning_rate": 0.01,
-    "num_epochs": 59,
+    "num_epochs": 10,
     "device": "cpu",
     "epoch_block": 1,
     "intrinsic_kernel_params": {
@@ -34,10 +34,10 @@ DEFAULT_CONFIG = {
     "dataset_kind": "LPU",
     "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
     "ratios": {
-        "test": 0.25,
+        "test": 0.3,
         "val": 0.1,
         "holdout": 0.0,
-        "train": 0.65
+        "train": 0.60
     },
     "batch_size": {
         "train": 64,
@@ -102,7 +102,7 @@ def train_model(config=None):
         all_scores_dict['val']['epochs'].append(epoch)
         scheduler.step(scores_dict['val']['overall_loss'])
 
-        for split in dataloaders_dict.keys():
+        for split in ['train', 'val']:
             for score_type, score_value in scores_dict[split].items():
                 if score_type not in all_scores_dict[split]:
                     all_scores_dict[split][score_type] = []
@@ -122,7 +122,7 @@ def train_model(config=None):
     # Evaluate on the test set with the best model based on the validation set
     model.load_state_dict(best_model_state)
 
-    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=model.loss_fn, model=model.gp_model)
+    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=model.loss_fn)
 
     # Flatten scores_dict
     flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)

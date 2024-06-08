@@ -73,14 +73,14 @@ def train_model(config=None):
     X_example, _, _, _ = next(iter(dataloaders_dict['train']))
     dim = X_example.shape[-1]
     uPU_model = LPU.models.uPU.uPU(config=config, dim=dim)
-    uPU_model.set_C(dataloaders_dict['holdout'])
+    uPU_model.set_C(dataloaders_dict['train'])
 
     optimizer = torch.optim.Adam([{
         'params': uPU_model.parameters(),
         'lr': config.get('learning_rate', DEFAULT_CONFIG.get('learning_rate', None) if USE_DEFAULT_CONFIG else None)
     }])
     device = config.get('device', 'cpu')
-    loss_func = LPU.models.uPU.uPUloss(prior=uPU_model.prior,
+    loss_fn = LPU.models.uPU.uPUloss(prior=uPU_model.prior,
                                          loss=LPU.models.uPU.select_loss('sigmoid'),
                                          gamma=config.get('gamma', DEFAULT_CONFIG.get('gamma', None) if USE_DEFAULT_CONFIG else None),
                                          beta=config.get('beta', DEFAULT_CONFIG.get('beta', None) if USE_DEFAULT_CONFIG else None))
@@ -94,13 +94,13 @@ def train_model(config=None):
     best_model_state = uPU_model.state_dict()
     best_scores_dict = None
     for epoch in range(num_epochs):
-        scores_dict['train'] = uPU_model.train_one_epoch(dataloader=dataloaders_dict['train'], optimizer=optimizer, loss_fn=loss_func, device=device)
+        scores_dict['train'] = uPU_model.train_one_epoch(dataloader=dataloaders_dict['train'], optimizer=optimizer, loss_fn=loss_fn, device=device)
         all_scores_dict['train']['epochs'].append(epoch)
 
-        scores_dict['val'] = uPU_model.validate(dataloaders_dict['val'], loss_fn=loss_func, model=uPU_model.model)
+        scores_dict['val'] = uPU_model.validate(dataloaders_dict['val'], loss_fn=loss_fn, model=uPU_model.model)
         all_scores_dict['val']['epochs'].append(epoch)
 
-        for split in dataloaders_dict.keys():
+        for split in ['train', 'val']:
             for score_type, score_value in scores_dict[split].items():
                 if score_type not in all_scores_dict[split]:
                     all_scores_dict[split][score_type] = []
@@ -119,7 +119,7 @@ def train_model(config=None):
     # Evaluate on the test set with the best model based on the validation set
     model.load_state_dict(best_model_state)
 
-    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=model.loss_fn, model=model.model)
+    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=loss_fn, model=model.model)
 
     # Flatten scores_dict
     flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)

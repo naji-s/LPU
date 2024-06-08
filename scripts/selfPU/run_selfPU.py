@@ -83,7 +83,7 @@ DEFAULT_CONFIG = {
     "momentum": 0.9,
     "weight_decay": 0.005,
     "modeldir": "LPU/scripts/selfPU/checkpoints/",
-    "epochs": 100,
+    "epochs": 10,
     "loss": "nnPU",
     "gpu": None,
     "workers": 0,
@@ -337,7 +337,7 @@ def train_model(config=None):
             
         scores_dict['val'] = selfPU_model.validate(dataloader_val, loss_fn=criterion, model=selfPU_model.model1)
         all_scores_dict['val']['epochs'].append(epoch)
-        for split in dataloaders_dict.keys():
+        for split in ['train', 'val']:
             for score_type, score_value in scores_dict[split].items():
                 if score_type not in all_scores_dict[split]:
                     all_scores_dict[split][score_type] = []
@@ -370,7 +370,7 @@ def train_model(config=None):
     # Evaluate on the test set with the best model based on the validation set
     model.load_state_dict(best_model_state)
 
-    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=model.loss_fn, model=model.model1)
+    best_scores_dict['test'] = model.validate(dataloader_test, loss_fn=criterion, model=model.model1)
 
     # Flatten scores_dict
     flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)

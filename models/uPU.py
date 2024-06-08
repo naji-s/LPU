@@ -258,9 +258,19 @@ class uPU(LPU.models.lpu_model_base.LPUModelBase):
         self.model = models[self.config['model']](self.dim).to(LPU.constants.DTYPE)
     
     def set_C(self, holdout_dataloader):
-        _, holdout_l, holdout_y, _ = next(iter(holdout_dataloader))
-        self.C = holdout_l[holdout_y == 1.].mean().detach().cpu().numpy()
-        is_positive = holdout_y==1
+        X_all = []
+        y_all = []
+        l_all = []
+        for X, l, y, _ in holdout_dataloader:
+            X_all.append(X)
+            y_all.append(y)
+            l_all.append(l)
+        X_all = torch.cat(X_all)
+        y_all = torch.cat(y_all)
+        l_all = torch.cat(l_all)
+        
+        self.C = l_all[y_all == 1.].mean().detach().cpu().numpy()
+        is_positive = y_all==1
         self.prior = is_positive.mean() if type(is_positive) == 'numpy.ndarray' else  is_positive.detach().cpu().numpy().mean()
         LOG.warning(f"\pi={self.prior} (the Y class prior) is passed using labeled data, since"
                     "the method needds it")

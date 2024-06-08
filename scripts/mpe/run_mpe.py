@@ -62,10 +62,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.25,
-        'val': 0.1,
-        'holdout': .0,
-        'train': .65, 
+        'test': 0.3,
+        'val': 0.05,
+        'holdout': .05,
+        'train': .6, 
     },
     "batch_size": {
         "train": 64,
@@ -149,7 +149,7 @@ def train_model(config=None):
         optimizer = torch.optim.AdamW(mpe_model.net.parameters(), lr=base_config['lr'])
 
     scores_dict = {}
-    all_scores_dict = {split: {'epochs': []} for split in mpe_dataloaders_dict.keys()}
+    all_scores_dict = {split: {'epochs': []} for split in ['train', 'val']}
 
     ## Train in the beginning for warm start
     if base_config['warm_start']:
@@ -170,7 +170,7 @@ def train_model(config=None):
                 mpe_model.set_C(l_mean=len(mpe_dataloaders_dict['holdout']['PDataset']) / (len(mpe_dataloaders_dict['holdout']['UDataset']) + len(mpe_dataloaders_dict['holdout']['PDataset'])))
             LOG.info(f"Warmup Epoch {epoch}: {scores_dict}")
 
-            for split in mpe_dataloaders_dict.keys():
+            for split in all_scores_dict.keys():
                 for score_type, score_value in scores_dict[split].items():
                     if score_type not in all_scores_dict[split]:
                         all_scores_dict[split][score_type] = []

@@ -15,7 +15,7 @@ DEFAULT_CONFIG = {
     # for VGP:
     "inducing_points_size": 32,
     "learning_rate": 0.01,
-    "num_epochs": 50,
+    "num_epochs": 10,
     "device": "cpu",
     "epoch_block": 1, # Perform validation every EPOCH_BLOCK iterations
     "kernel_mode": 2,
@@ -40,10 +40,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.25,
-        'val': 0.1,
-        'holdout': .0,
-        'train': .65, 
+        'test': 0.3,
+        'val': 0.05,
+        'holdout': .05,
+        'train': .6, 
     },
 
     "batch_size": {
@@ -114,14 +114,10 @@ def train_model(config=None):
                 best_val_loss = scores_dict['val']['overall_loss']
                 best_epoch = epoch
                 best_scores_dict = copy.deepcopy(scores_dict)
+                best_model_state = copy.deepcopy(kme_model.state_dict())
 
             scheduler.step(scores_dict['val']['overall_loss'])
             # Update best validation loss and epoch
-            if scores_dict['val']['overall_loss'] < best_val_loss:
-                best_val_loss = scores_dict['val']['overall_loss']
-                best_epoch = epoch
-                best_scores_dict = copy.deepcopy(scores_dict)
-                best_model_state = copy.deepcopy(kme_model.state_dict())
 
         for split in dataloaders_dict.keys():
             for score_type, score_value in scores_dict[split].items():

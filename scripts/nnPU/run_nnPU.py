@@ -43,10 +43,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.25,
+        'test': 0.3,
         'val': 0.1,
         'holdout': .0,
-        'train': .65, 
+        'train': .6, 
     },
 
 }
@@ -78,7 +78,7 @@ def train_model(config=None):
                                                                        label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
     dim = dataloaders_dict['train'].dataset.X.shape[-1]
     nnPU_model = LPU.models.nnPU.nnPU(config=config, dim=dim)
-    nnPU_model.set_C(dataloaders_dict['holdout'])
+    nnPU_model.set_C(dataloaders_dict['train'])
 
     optimizer = torch.optim.Adam([{
         'params': nnPU_model.parameters(),
@@ -124,7 +124,7 @@ def train_model(config=None):
     # Evaluate on the test set with the best model based on the validation set
     model.load_state_dict(best_model_state)
 
-    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=model.loss_fn, model=model.model)
+    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=loss_fn, model=model.model)
 
     # Flatten scores_dict
     flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
