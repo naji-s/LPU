@@ -1,14 +1,24 @@
 import json
 import ray.tune
 import ray.train
+import os
+import datetime
 
 import LPU.scripts
 import LPU.scripts.vpu
 import LPU.scripts.vpu.run_vpu
+import LPU.utils.utils_general
 
-def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None):
+LOG = LPU.utils.utils_general.configure_logger(__name__)
+MODEL_NAME = 'vpu'
+
+def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None, random_state=None):
     # Configuration for hyperparameters to be tuned
+    if random_state is None:
+        LOG.warning("seed_num is None. Setting it to 0.")
+        random_state = 0
     search_space = {
+        "random_state": random_state,
         "learning_rate": ray.tune.loguniform(1e-5, 1e-3),
         "epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "batch_size": {
@@ -21,6 +31,7 @@ def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None)
     reporter = ray.tune.CLIReporter(metric_columns=[
         "val_overall_loss", "val_phi_loss", "val_reg_loss",
         "test_overall_loss", "test_phi_loss", "test_reg_loss"])
+
 
     result = ray.tune.run(
         LPU.scripts.vpu.run_vpu.train_model,
@@ -43,8 +54,20 @@ def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None)
         "test_y_accuracy": best_trial.last_result["test_y_accuracy"],
         "test_y_APS": best_trial.last_result["test_y_APS"]}
     }    
-    print (json.dumps(best_trial_report, indent=4))
+    # Storing results in a JSON file
+    EXPERIMENT_DATETIME = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    json_save_dir = os.path.join(results_dir, MODEL_NAME, EXPERIMENT_DATETIME)
+
+    # Ensure the directory exists
+    os.makedirs(json_save_dir, exist_ok=True)
+    json_save_path = os.path.join(json_save_dir, "best_trial_results.json")
+    
+    with open(json_save_path, "w") as json_file:
+        json.dump(best_trial_report, json_file, indent=4)
+
+    print(json.dumps(best_trial_report, indent=4))
     return best_trial_report
 
 if __name__ == "__main__":
-    main()
+    args = LPU.utils.utils_general.tune_parse_args()
+    main(args.num_samples, args.max_num_epochs, args.gpus_per_trial, args.results_dir, args.random_state)

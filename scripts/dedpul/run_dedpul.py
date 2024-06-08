@@ -65,9 +65,9 @@ DEFAULT_CONFIG = {
     'batch_size': 
     {
         'train': 64,
-        'test': None,
-        'val': None,
-        'holdout': None,
+        'test': 64,
+        'val': 64,
+        'holdout': 64,
     },
     'ratios': 
     {
@@ -75,9 +75,9 @@ DEFAULT_CONFIG = {
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
         'test': 0.25,
-        'val': 0.2,
-        'holdout': .05,
-        'train': .5, 
+        'val': 0.1,
+        'holdout': .0,
+        'train': .65, 
     },
     'train_nn_options': 
     { 
@@ -89,26 +89,35 @@ DEFAULT_CONFIG = {
 
 
 def train_model(config=None):
-
     if config is None:
         config = {}
     # Load the base configuration
     # base_config = LPU.utils.utils_general.load_and_process_config(config['base_config_file_path'])
     # Update the base configuration with the tuning configuration for Ray if it is available
-    base_config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+
+    if config is None:
+        config = {}
+    # Load the base configuration
+    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    if 'random_state' in config and config['random_state'] is not None:
+        random_state = config['random_state']
+    else:
+        random_state = LPU.constants.RANDOM_STATE
+        
+    LPU.utils.utils_general.set_seed(random_state)
 
 
     # Initialize training components using the combined configuration
     torch.set_default_dtype(LPU.constants.DTYPE)
-    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(base_config)
-    dedpul_model = LPU.models.dedpul.DEDPUL(base_config)
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+    dedpul_model = LPU.models.dedpul.DEDPUL(config)
     
     # Train and report metrics
     scores_dict = dedpul_model.train(
         train_dataloader=dataloaders_dict['train'], 
         val_dataloader=dataloaders_dict['val'], 
         test_dataloader=dataloaders_dict['test'], 
-        train_nn_options=base_config['train_nn_options'])
+        train_nn_options=config['train_nn_options'])
     
     # Flatten scores_dict
     flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)

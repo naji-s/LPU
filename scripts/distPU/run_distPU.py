@@ -41,16 +41,17 @@ DEFAULT_CONFIG = {
     "warm_up_epochs": 10,
     "pu_epochs": 10,
     "random_seed": 0,
-    "ratios": 
+    'ratios': 
     {
         # *** NOTE ***
-        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO": None,
-        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1": None,
-        "test": 0.25,
-        "val": 0.2,
-        "holdout": 0.05,
-        "train": 0.5
+        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+        'test': 0.25,
+        'val': 0.1,
+        'holdout': .0,
+        'train': .65, 
     },
+
     "dataset_kind": "LPU",
     "batch_size": 
     {

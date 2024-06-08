@@ -408,23 +408,22 @@ class DEDPUL(LPU.models.lpu_model_base.LPUModelBase):
         if estimate_preds_cv_options is None:
             estimate_preds_cv_options = dict()
 
-        with unittest.mock.patch('pandas.core.window.Expanding', new=expanding_wrapper):
-            # preds = estimate_preds_cv_catboost(df, target, **estimate_preds_cv_options)
-            ### uncomment the line above and comment the line below for experiments with catboost instead of neural networks
-            preds, preds_test, loss_dict = DEDPUL.modified_estimate_preds_cv(df=df, cv=cv, target=target, test_df=test_df, test_target=test_target, alpha=alpha, training_mode=training_mode, bayes=bayes,
-                                    train_nn_options=train_nn_options, lr=lr,  **estimate_preds_cv_options)
-            if bayes:
-                (preds, means, variances), (preds_test, means_test, variances_test), loss_dict = preds, preds_test, loss_dict
+        # preds = estimate_preds_cv_catboost(df, target, **estimate_preds_cv_options)
+        ### uncomment the line above and comment the line below for experiments with catboost instead of neural networks
+        preds, preds_test, loss_dict = DEDPUL.modified_estimate_preds_cv(df=df, cv=cv, target=target, test_df=test_df, test_target=test_target, alpha=alpha, training_mode=training_mode, bayes=bayes,
+                                train_nn_options=train_nn_options, lr=lr,  **estimate_preds_cv_options)
+        if bayes:
+            (preds, means, variances), (preds_test, means_test, variances_test), loss_dict = preds, preds_test, loss_dict
 
-            if bayes:
-                diff = LPU.external_libs.DEDPUL.algorithms.estimate_diff_bayes(means, variances, target, **estimate_diff_options)
-                diff_test = LPU.external_libs.DEDPUL.algorithms.estimate_diff_bayes(means_test, variances_test, target, **estimate_diff_options)
-            else:
-                diff = LPU.external_libs.DEDPUL.algorithms.estimate_diff(preds, target, **estimate_diff_options)
-                diff_test = LPU.external_libs.DEDPUL.algorithms.estimate_diff(preds_test, test_target, **estimate_diff_options)
+        if bayes:
+            diff = LPU.external_libs.DEDPUL.algorithms.estimate_diff_bayes(means, variances, target, **estimate_diff_options)
+            diff_test = LPU.external_libs.DEDPUL.algorithms.estimate_diff_bayes(means_test, variances_test, target, **estimate_diff_options)
+        else:
+            diff = LPU.external_libs.DEDPUL.algorithms.estimate_diff(preds, target, **estimate_diff_options)
+            diff_test = LPU.external_libs.DEDPUL.algorithms.estimate_diff(preds_test, test_target, **estimate_diff_options)
 
-            alpha, poster = DEDPUL.modified_estimate_poster_em(diff=diff, mode='dedpul', alpha=alpha, **estimate_poster_options)
-            _, poster_test = DEDPUL.modified_estimate_poster_em(diff=diff_test, mode='dedpul', alpha=alpha, **estimate_poster_options)
+        alpha, poster = DEDPUL.modified_estimate_poster_em(diff=diff, mode='dedpul', alpha=alpha, **estimate_poster_options)
+        _, poster_test = DEDPUL.modified_estimate_poster_em(diff=diff_test, mode='dedpul', alpha=alpha, **estimate_poster_options)
         return alpha, poster, poster_test, preds, preds_test, loss_dict
         
     def __init__(self, config, *args, **kwargs):

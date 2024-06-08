@@ -1,15 +1,25 @@
-import sys
 import json
-import yaml
+import os
+import datetime
+
 import ray.tune
 import ray.train
 
 import LPU.scripts
 import LPU.scripts.distPU
 import LPU.scripts.distPU.run_distPU
+import LPU.utils.utils_general
 
-def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None):
+
+LOG = LPU.utils.utils_general.configure_logger(__name__)
+MODEL_NAME = 'distPU'
+
+def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None, random_state=None):
+    if random_state is None:
+        LOG.warning("seed_num is None. Setting it to 0.")
+        random_state = 0
     search_space = {
+        "random_state": random_state,
         "warm_up_lr": ray.tune.loguniform(1e-4, 1e-1),
         "lr": ray.tune.loguniform(1e-3, 1e-1),
         # "warm_up_weight_decay": ray.tune.loguniform(1e-6, 1e-2),
@@ -22,7 +32,6 @@ def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None)
         # "schedular": ray.tune.choice(['cos-ann', 'step']),
         "entropy": ray.tune.uniform(0.1, 1.0),
         "co_mu": ray.tune.uniform(0.001, 0.01),
-        "alpha": ray.tune.uniform(3.0, 9.0),
         "co_mix_entropy": ray.tune.uniform(0.01, 0.1),
         "co_mixup": ray.tune.uniform(2.0, 10.0),
     }
@@ -51,8 +60,21 @@ def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None)
             "test_y_APS": best_trial.last_result["test_y_APS"]
         }
     }
+    # Storing results in a JSON file
+    EXPERIMENT_DATETIME = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    json_save_dir = os.path.join(results_dir, MODEL_NAME, EXPERIMENT_DATETIME)
+
+    # Ensure the directory exists
+    os.makedirs(json_save_dir, exist_ok=True)
+    json_save_path = os.path.join(json_save_dir, "best_trial_results.json")
+    
+    with open(json_save_path, "w") as json_file:
+        json.dump(best_trial_report, json_file, indent=4)
+
     print(json.dumps(best_trial_report, indent=4))
     return best_trial_report
 
+
 if __name__ == "__main__":
-    main()
+    args = LPU.utils.utils_general.tune_parse_args()
+    main(args.num_samples, args.max_num_epochs, args.gpus_per_trial, args.results_dir, args.random_state)

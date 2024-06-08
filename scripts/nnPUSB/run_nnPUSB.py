@@ -44,10 +44,13 @@ DEFAULT_CONFIG = {
     "model": "3mlp",
     "resample_model": "3mlp",
     "ratios": {
+        # *** NOTE ***
+        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
         "test": 0.25,
-        "val": 0.2,
-        "holdout": 0.05,
-        "train": 0.5
+        "val": 0.1,
+        "holdout": 0.0,
+        "train": 0.65
     },
 
     # "unlabeled": 100, # uncomment only if you use the original datasets for nnPUSB
