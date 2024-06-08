@@ -315,6 +315,8 @@ def train_model(config=None):
     best_val_loss = float('inf')
     best_epoch = -1
     scores_dict = {}
+    best_model_state = selfPU_model.state_dict()
+    best_scores_dict = {}
     all_scores_dict = {split: {'epochs': []} for split in ['train', 'val']}
 
     for epoch in range(config['epochs']):
@@ -335,7 +337,7 @@ def train_model(config=None):
             
         scores_dict['val'] = selfPU_model.validate(dataloader_val, loss_fn=criterion, model=selfPU_model.model1)
         all_scores_dict['val']['epochs'].append(epoch)
-        for split in ['train', 'val']:
+        for split in dataloaders_dict.keys():
             for score_type, score_value in scores_dict[split].items():
                 if score_type not in all_scores_dict[split]:
                     all_scores_dict[split][score_type] = []
@@ -359,33 +361,31 @@ def train_model(config=None):
         if scores_dict['val']['overall_loss'] < best_val_loss:
             best_val_loss = scores_dict['val']['overall_loss']
             best_epoch = epoch
-            # best_scores_dict = copy.deepcopy(scores_dict)
+            best_scores_dict = copy.deepcopy(scores_dict)
+            best_model_state = copy.deepcopy(selfPU_model.state_dict())
 
-    scores_dict['test'] = selfPU_model.validate(dataloader_test, loss_fn=criterion, model=selfPU_model.model1)
+    LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
+
+    model = selfPU_model
+    # Evaluate on the test set with the best model based on the validation set
+    model.load_state_dict(best_model_state)
+
+    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=model.loss_fn, model=model.model1)
 
     # Flatten scores_dict
-    flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:
             if 'epochs' not in key:
                 filtered_scores_dict[key] = value
-
-    print("Reporting Metrics: ", filtered_scores_dict)  # Debug print to check keys
-    LOG.info(f"Final test error: {scores_dict['test']}")
+    LOG.info(f"Final test error: {best_scores_dict['test']}")
 
     # Report metrics if executed under Ray Tune
     if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
         ray.train.report(filtered_scores_dict)
     else:
         return all_scores_dict, best_epoch
-
-    # return scores_dict, best_epoch
-    # print("Test Accuracy: {}".format(testPNacc1))
-    # print(best_acc1)
-    # print(best_acc2)
-    # print(best_acc3)
-    # print(best_acc4)    
 
 if __name__ == "__main__":
     import warnings

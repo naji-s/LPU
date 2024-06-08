@@ -36,7 +36,7 @@ except ImportError:
 USE_DEFAULT_CONFIG = False
 DEFAULT_CONFIG = {
     'learning_rate': .01,
-    'num_epochs': 1000,
+    'num_epochs': 10,
     'device': 'cpu',
     'dtype': LPU.constants.DTYPE,
     'train_val_ratio': .1,

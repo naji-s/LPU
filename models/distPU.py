@@ -108,7 +108,7 @@ class distPU(LPU.models.lpu_model_base.LPUModelBase):
             optimizer.step()
             loss_total = loss_total + loss.item()
         scheduler.step()
-        return {'loss': loss_total / len(dataloader)}
+        return {'overall_loss': loss_total / len(dataloader)}
 
     def train_mixup_one_epoch(self, epoch, dataloader, loss_fn, optimizer, scheduler, mixup_dataset, co_entropy):
         self.model.train()
@@ -139,7 +139,7 @@ class distPU(LPU.models.lpu_model_base.LPUModelBase):
                 mixup_dataset.psudo_labels[index] = scores_.detach()
             loss_total = loss_total + loss.item()
         scheduler.step()
-        return {'loss': loss_total / len(dataloader)}
+        return {'overall_loss': loss_total / len(dataloader)}
 
     def predict_prob_y_given_X(self, X=None, f_x=None):
         with torch.no_grad():

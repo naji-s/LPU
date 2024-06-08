@@ -38,7 +38,6 @@ class GeometricBaseEstimator(sklearn.base.BaseEstimator):
         self._initialize_reporting_lists()
 
         best_val_loss = float('inf')
-        best_val_loss = float('inf')
         best_model_state = None
         for epoch in range(self.num_epochs):
             start_time = time.time()

@@ -170,7 +170,7 @@ def train_model(config=None):
                 mpe_model.set_C(l_mean=len(mpe_dataloaders_dict['holdout']['PDataset']) / (len(mpe_dataloaders_dict['holdout']['UDataset']) + len(mpe_dataloaders_dict['holdout']['PDataset'])))
             LOG.info(f"Warmup Epoch {epoch}: {scores_dict}")
 
-            for split in ['train', 'val']:
+            for split in mpe_dataloaders_dict.keys():
                 for score_type, score_value in scores_dict[split].items():
                     if score_type not in all_scores_dict[split]:
                         all_scores_dict[split][score_type] = []
@@ -178,6 +178,7 @@ def train_model(config=None):
 
     best_val_loss = float('inf')
     best_epoch = -1
+    best_model_state = copy.deepcopy(mpe_model.state_dict())
     for epoch in range(base_config['epochs']):
         train_scores = mpe_model.train_one_epoch(epoch=epoch, p_trainloader=mpe_dataloaders_dict['train']['PDataset'],
                                                  u_trainloader=mpe_dataloaders_dict['train']['UDataset'],
@@ -196,7 +197,7 @@ def train_model(config=None):
             best_val_loss = scores_dict['val']['overall_loss']
             best_epoch = epoch
             best_scores_dict = copy.deepcopy(scores_dict)
-
+            best_model_state = copy.deepcopy(mpe_model.state_dict())  
         for split in ['train', 'val']:
             for score_type, score_value in scores_dict[split].items():
                 if score_type not in all_scores_dict[split]:
@@ -209,27 +210,24 @@ def train_model(config=None):
 
         LOG.info(f"Train Epoch {epoch}: {scores_dict}")
 
+    LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 
+    model = mpe_model
+    # Evaluate on the test set with the best model based on the validation set
+    model.load_state_dict(best_model_state)
 
-    for split in mpe_dataloaders_dict.keys():
-        for score_type, score_values in all_scores_dict[split].items():
-            if score_type != 'epochs':
-                all_scores_dict[split][score_type] = np.array(score_values)
-
-
-    scores_dict['test'] = mpe_model.validate(epoch=0, p_validloader=mpe_dataloaders_dict['test']['PDataset'],
-                                             u_validloader=mpe_dataloaders_dict['test']['UDataset'],
-                                             criterion=criterion, threshold=0.5)
-
+    best_scores_dict['test'] = model.validate(epoch, p_validloader=mpe_dataloaders_dict['test']['PDataset'],
+                                                u_validloader=mpe_dataloaders_dict['test']['UDataset'],
+                                                criterion=criterion, threshold=0.5)
 
     # Flatten scores_dict
-    flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:
             if 'epochs' not in key:
                 filtered_scores_dict[key] = value
-    print("Reporting Metrics: ", filtered_scores_dict)  # Debug print to check keys
+    LOG.info(f"Final test error: {best_scores_dict['test']}")
 
     # Report metrics if executed under Ray Tune
     if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):

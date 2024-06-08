@@ -114,7 +114,7 @@ def train_model(config=None):
     best_val_loss = float('inf')
     best_epoch = -1
     best_scores_dict = None
-
+    best_model_state = copy.deepcopy(nnPUSB_model.state_dict())
     for epoch in range(num_epochs):
         scores_dict['train'] = nnPUSB_model.train_one_epoch(dataloader=dataloaders_dict['train'], optimizer=optimizer, loss_fn=loss_func, device=device)
         all_scores_dict['train']['epochs'].append(epoch)
@@ -123,33 +123,37 @@ def train_model(config=None):
         all_scores_dict['val']['epochs'].append(epoch)
 
         for split in dataloaders_dict.keys():
-            if split in ['train', 'val']:
-                for score_type, score_value in scores_dict[split].items():
-                    if score_type not in all_scores_dict[split]:
-                        all_scores_dict[split][score_type] = []
-                    all_scores_dict[split][score_type].append(score_value)
+            for score_type, score_value in scores_dict[split].items():
+                if score_type not in all_scores_dict[split]:
+                    all_scores_dict[split][score_type] = []
+                all_scores_dict[split][score_type].append(score_value)
 
         # Update best validation loss and epoch
         if scores_dict['val']['overall_loss'] < best_val_loss:
             best_val_loss = scores_dict['val']['overall_loss']
             best_epoch = epoch
-            # best_scores_dict = copy.deepcopy(scores_dict)
-
+            best_scores_dict = copy.deepcopy(scores_dict)
+            best_model_state = copy.deepcopy(nnPUSB_model.state_dict())
         LOG.info(f"Epoch {epoch}: {scores_dict}")
 
 
     
-    scores_dict['test'] = nnPUSB_model.validate(dataloaders_dict['test'], loss_fn=loss_func, model=nnPUSB_model.model)
+    LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
+
+    model = nnPUSB_model
+    # Evaluate on the test set with the best model based on the validation set
+    model.load_state_dict(best_model_state)
+
+    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=model.loss_fn, model=model.model)
+
     # Flatten scores_dict
-    flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
+    flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
         if 'train' in key or 'val' in key or 'test' in key:
             if 'epochs' not in key:
                 filtered_scores_dict[key] = value
-
-    print("Reporting Metrics: ", filtered_scores_dict)  # Debug print to check keys
-    LOG.info(f"Final test error: {scores_dict['test']}")
+    LOG.info(f"Final test error: {best_scores_dict['test']}")
 
     # Report metrics if executed under Ray Tune
     if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
