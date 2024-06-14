@@ -18,7 +18,7 @@ import LPU.external_libs.Self_PU.datasets
 import LPU.external_libs.Self_PU.models
 import LPU.external_libs.Self_PU.train
 import LPU.external_libs.Self_PU.utils
-import LPU.models.old_selfPU
+import LPU.extras.old_selfPU
 import LPU.utils.plot_utils
 import LPU.utils.utils_general
 

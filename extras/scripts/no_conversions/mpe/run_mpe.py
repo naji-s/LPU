@@ -141,27 +141,27 @@ def train_model(config=None):
         config = {}
 
     # Load the base configuration
-    base_config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    device = base_config['device']
-    alpha = base_config['alpha']
-    beta = base_config['beta']
-    data_dir = base_config['data_dir']
-    data_type = base_config['data_type']
-    net_type = base_config['net_type']
-    show_bar = base_config['show_bar']
-    warm_start = base_config['warm_start']
-    warm_start_epochs = base_config['warm_start_epochs']
+    device = config['device']
+    alpha = config['alpha']
+    beta = config['beta']
+    data_dir = config['data_dir']
+    data_type = config['data_type']
+    net_type = config['net_type']
+    show_bar = config['show_bar']
+    warm_start = config['warm_start']
+    warm_start_epochs = config['warm_start_epochs']
 
-    batch_size = base_config['batch_size']['train']
-    estimate_alpha = base_config['estimate_alpha']
+    batch_size = config['batch_size']['train']
+    estimate_alpha = config['estimate_alpha']
     LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
     y_vals = []
     y_probs = []
     y_ests = []
     
-    # mpe_dataloaders_dict = create_dataloaders_dict_mpe(base_config)
+    # mpe_dataloaders_dict = create_dataloaders_dict_mpe(config)
     (p_trainloader, u_trainloader, 
      p_testloader, u_testloader, 
      net, X, Y, p_testdata, 
@@ -177,12 +177,12 @@ def train_model(config=None):
     criterion = torch.nn.CrossEntropyLoss()
     model_parameters = net.parameters()
 
-    if base_config['optimizer'] == "SGD":
-        optimizer = torch.optim.SGD(model_parameters, lr=base_config['lr'], momentum=base_config['momentum'], weight_decay=base_config['wd'])
-    elif base_config['optimizer'] == "Adam":
-        optimizer = torch.optim.Adam(model_parameters, lr=base_config['lr'], weight_decay=base_config['wd'])
-    elif base_config['optimizer'] == "AdamW":
-        optimizer = torch.optim.AdamW(model_parameters, lr=base_config['lr'])
+    if config['optimizer'] == "SGD":
+        optimizer = torch.optim.SGD(model_parameters, lr=config['lr'], momentum=config['momentum'], weight_decay=config['wd'])
+    elif config['optimizer'] == "Adam":
+        optimizer = torch.optim.Adam(model_parameters, lr=config['lr'], weight_decay=config['wd'])
+    elif config['optimizer'] == "AdamW":
+        optimizer = torch.optim.AdamW(model_parameters, lr=config['lr'])
 
     scores_dict = {}
     # all_scores_dict = {split: {'epochs': []} for split in mpe_dataloaders_dict.keys()}
@@ -214,7 +214,7 @@ def train_model(config=None):
     best_epoch = -1
 
     alpha_used = alpha_estimate
-    for epoch in range(base_config['epochs']):
+    for epoch in range(config['epochs']):
 
         if config['use_alpha']: 
             alpha_used =  alpha_estimate
@@ -245,7 +245,7 @@ def train_model(config=None):
             LOG.info(f"Epoch:{epoch}, Train Acc:{train_acc}, Val Acc:{valid_acc}, Test Acc:{test_acc}")
         # LOG.info(f"Train Epoch {epoch}: {scores_dict}")
 
-        # all_scores_dict['train']['epochs'].append(epoch + base_config['warm_start_epochs'])
+        # all_scores_dict['train']['epochs'].append(epoch + config['warm_start_epochs'])
 
         # Update best validation loss and epoch
         # if scores_dict['val']['overall_loss'] < best_val_loss:

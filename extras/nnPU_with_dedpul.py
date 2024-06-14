@@ -20,14 +20,14 @@ import LPU.external_libs.DEDPUL
 import LPU.external_libs.DEDPUL.algorithms
 import LPU.external_libs.DEDPUL.NN_functions
 import LPU.external_libs.DEDPUL.utils
-import LPU.models.dedpul
-import LPU.models.geometric.elkanGGPC
+import LPU.models.dedpul.dedpul
+import LPU.models.geometric.elkan.elkanGGPC
 import LPU.models.lpu_model_base
 
 LOG = logging.getLogger(__name__)
 
 EPSILON = 1e-16
-class nnPU(LPU.models.dedpul.DEDPUL):
+class nnPU(LPU.models.dedpul.dedpul.DEDPUL):
     """
     Using estimator of p(s|X) to predict p(y|X)
     """
