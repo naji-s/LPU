@@ -21,7 +21,7 @@ import sklearn.model_selection
 import torch
 import LPU.constants
 import LPU.external_libs
-import LPU.models.geometric.elkanGGPC
+import LPU.models.geometric.elkan.elkanGGPC
 import LPU.models.lpu_model_base
 import LPU.external_libs.Self_PU.datasets
 import LPU.external_libs.Self_PU.functions
@@ -130,12 +130,16 @@ class selfPU(LPU.models.lpu_model_base.LPUModelBase):
             return True
         
     def set_C(self, holdout_dataloader):
-        try:
-            assert (holdout_dataloader.batch_size == len(holdout_dataloader.dataset)), "There should be only one batch in the dataloader."
-        except AssertionError as e:
-            LOG.error(f"There should be only one batch in the dataloader, but {holdout_dataloader.batch_size} is smaller than {len(holdout_dataloader.dataset)}.")
-            raise e
-        X, l, y, _ = next(iter(holdout_dataloader))
+        X_all = []
+        l_all = []
+        y_all = []
+        for i, (X, l, y, _) in enumerate(holdout_dataloader):
+            X_all.append(X)
+            l_all.append(l)
+            y_all.append(y)
+        X = torch.cat(X_all, dim=0)
+        l = torch.cat(l_all, dim=0)
+        y = torch.cat(y_all, dim=0)
         self.C = l[y == 1].mean().detach().cpu().numpy()
 
     def check_mean_teacher(self, epoch):

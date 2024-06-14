@@ -18,7 +18,7 @@ import LPU.models.lpu_model_base
 import LPU.constants
 import LPU.datasets.animal_no_animal.animal_no_animal_utils
 import LPU.models.lpu_model_base
-import LPU.models.geometric.psychmGGPC
+import LPU.models.geometric.psychm.psychmGGPC
 import LPU.utils.dataset_utils
 import LPU.models.geometric.GVGP
 import LPU.utils.utils_general  
@@ -70,7 +70,17 @@ class PsychMGP(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
             LOG.info(f"True beta: {true_beta}")
             self.variational_mean_alpha = torch.nn.Parameter(torch.zeros(num_features, dtype=LPU.constants.DTYPE))# + true_alpha)
             # Parameter for the log of the diagonal elements to ensure they are positive
-            self.log_diag = torch.nn.Parameter(torch.randn(num_features, dtype=LPU.constants.DTYPE))
+            # making sure no element of diagonal is too small to avoid overflow. 
+            # Assuming LPU.constants.DTYPE and LPU.constants.EPSILON are predefined constants
+            dtype = LPU.constants.DTYPE
+            epsilon = LPU.constants.EPSILON
+
+            # Creating a random tensor and comparing it with EPSILON
+            random_tensor = torch.randn(num_features, dtype=dtype)
+            safe_tensor = torch.max(random_tensor, torch.tensor(epsilon, dtype=dtype))
+
+            # Setting this as a parameter
+            self.log_diag = torch.nn.Parameter(safe_tensor)
             # Parameter for the lower triangular elements below the diagonal
             # There are num_features * (num_features - 1) / 2 such elements
             self.lower_tri = torch.nn.Parameter(torch.randn(num_features * (num_features - 1) // 2, dtype=LPU.constants.DTYPE))

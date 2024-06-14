@@ -7,8 +7,8 @@ pytorch models in this library. That is a future TODO (naji)
 import logging
 import sys
 
-import LPU.models.nnPU
-import LPU.models.uPU
+import LPU.models.nnPU.nnPU
+import LPU.models.uPU.uPU
 sys.path.append('LPU/external_libs/nnPUSB')
 
 import numpy as np
@@ -17,7 +17,7 @@ import scipy.special
 
 import LPU.constants
 import LPU.external_libs
-import LPU.models.geometric.elkanGGPC
+import LPU.models.geometric.elkan.elkanGGPC
 import LPU.models.lpu_model_base
 
 
@@ -27,7 +27,7 @@ EPSILON = 1e-16
 
 
 
-class nnPUSB(LPU.models.uPU.uPU):
+class nnPUSB(LPU.models.uPU.uPU.uPU):
     def __init__(self, config, dim=None, **kwargs):
         super(nnPUSB, self).__init__(config, dim=dim, **kwargs)
         self.select_model()

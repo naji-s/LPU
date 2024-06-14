@@ -2,16 +2,14 @@ import logging
 
 import numpy as np
 
-import LPU.external_libs.SAR_PU.lib.km.km.Kernel_MPE_grad_threshold
-import LPU.models.geometric.elkanGGPC
+import LPU.models.geometric.elkan.elkanGGPC
 import LPU.utils.utils_general
+import LPU.models.geometric.kme.modified_Kernel_MPE_grad_threshold
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
 
-EPSILON = 1e-16
 
-
-class KMEModelGGPC(LPU.models.geometric.elkanGGPC.ElkanGGPC):
+class KMEModelGGPC(LPU.models.geometric.elkan.elkanGGPC.ElkanGGPC):
     """
     Using estimator of p(s|X) to predict p(y|X)
     """
@@ -29,7 +27,7 @@ class KMEModelGGPC(LPU.models.geometric.elkanGGPC.ElkanGGPC):
             l_holdout.append(l_holdout_batch)
         X_holdout = np.vstack(X_holdout)
         l_holdout = np.hstack(l_holdout)
-        kappa_2, kappa_1 = LPU.external_libs.SAR_PU.lib.km.km.Kernel_MPE_grad_threshold.wrapper(X_holdout, X_holdout[l_holdout==1])
+        kappa_2, kappa_1 = LPU.models.geometric.kme.modified_Kernel_MPE_grad_threshold.modified_wrapper(X_holdout, X_holdout[l_holdout==1], thres_par=self.config['thres_par'], lambda_0=self.config['lambda_0'], lambda_1=self.config['lambda_0'] + self.config['lambda_1_increment'])
         if self.kernel_mode == 1:
             self.C = l_holdout.mean() / kappa_1
         else:

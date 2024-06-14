@@ -4,14 +4,14 @@ import logging
 import numpy as np
 import LPU.external_libs.SAR_PU.lib.tice.tice
 import LPU.external_libs.SAR_PU.lib.tice.tice.tice
-import LPU.models.geometric.elkanGGPC
+import LPU.models.geometric.elkan.elkanGGPC
 
 LOG = logging.getLogger(__name__)
 
 EPSILON = 1e-16
 
 
-class Tice(LPU.models.geometric.elkanGGPC.ElkanGGPC):
+class Tice(LPU.models.geometric.elkan.elkanGGPC.ElkanGGPC):
     """
     Using estimator of p(s|X) to predict p(y|X)
     """

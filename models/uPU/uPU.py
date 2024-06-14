@@ -16,9 +16,9 @@ import scipy.special
 
 import LPU.constants
 import LPU.external_libs
-import LPU.models.geometric.elkanGGPC
+import LPU.models.geometric.elkan.elkanGGPC
 import LPU.models.lpu_model_base
-import LPU.models.uPU
+import LPU.models.uPU.uPU
 
 
 LOG = logging.getLogger(__name__)

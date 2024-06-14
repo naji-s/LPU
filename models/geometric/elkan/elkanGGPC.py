@@ -1,6 +1,6 @@
 import logging
 
-import LPU.models.geometric.elkanGGPC
+import LPU.models.geometric.elkan.elkanGGPC
 import LPU.models.geometric.geometric_base
 import LPU.utils.manifold_utils
 
@@ -18,7 +18,7 @@ torch.set_default_dtype(LPU.constants.DTYPE)
 import LPU.models
 import LPU.models.lpu_model_base
 import LPU.models.geometric.GVGP
-import LPU.models.geometric.psychmGGPC
+import LPU.models.geometric.psychm.psychmGGPC
 
 
 EPOCH_BLOCKS = 1

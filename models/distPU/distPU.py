@@ -157,6 +157,15 @@ class distPU(LPU.models.lpu_model_base.LPUModelBase):
         return self.C
 
     def set_C(self, holdout_dataloader):
-        X, l, y, _ = next(iter(holdout_dataloader))
-        self.C = l[y == 1].mean().detach().cpu().numpy()
-        self.prior = y.mean().detach().cpu().numpy()
+        X_all = []
+        y_all = []
+        l_all = []
+        for _, (X, l, y, _) in enumerate(holdout_dataloader):
+            X_all.append(X)
+            y_all.append(y)
+            l_all.append(l)
+        X_all = torch.cat(X_all)
+        y_all = torch.cat(y_all)
+        l_all = torch.cat(l_all)
+        self.C = l_all[y_all == 1].mean().detach().cpu().numpy()
+        self.prior = y_all.mean().detach().cpu().numpy()

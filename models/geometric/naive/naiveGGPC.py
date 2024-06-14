@@ -1,5 +1,5 @@
 import LPU.models.Kernel_MPE_grad_threshold
-import LPU.models.geometric.elkanGGPC
+import LPU.models.geometric.elkan.elkanGGPC
 EPSILON = 1e-16
 
 class NaiveGGPC(LPU.models.geometric.elkanGGPC.ElkanGGPC):

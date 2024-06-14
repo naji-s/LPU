@@ -13,7 +13,7 @@ import torch
 
 import LPU.constants
 import LPU.external_libs
-import LPU.models.geometric.elkanGGPC
+import LPU.models.geometric.elkan.elkanGGPC
 import LPU.models.lpu_model_base
 import LPU.external_libs.DEDPUL
 import LPU.external_libs.DEDPUL.algorithms
@@ -37,9 +37,9 @@ class DEDPUL(LPU.models.lpu_model_base.LPUModelBase):
     """
     @abstractmethod
     def modified_train_NN(mix_data, pos_data, discriminator, d_optimizer, mix_data_val=None, pos_data_val=None, mix_data_test=None, pos_data_test=None,
-                    n_epochs=200, batch_size=64, n_batches=None, n_early_stop=5,
+                    n_epochs=None, batch_size=None, n_batches=None, n_early_stop=None,
                     d_scheduler=None, training_mode='standard', disp=False, loss_function=None, nnre_alpha=None,
-                    metric=None, stop_by_metric=False, bayes=False, bayes_weight=1e-5, beta=0, gamma=1):
+                    metric=None, stop_by_metric=False, bayes=False, bayes_weight=None, beta=None, gamma=None):
         """ ** NOTE **: Identical to the LPU.external_libs.DEDPUL.NN_functions.train_NN, but with some modifications to set the 
             type of variables in the model to global constant value LPU.constants.DTYPE
         Train discriminator to classify mix_data from pos_data.
@@ -217,6 +217,7 @@ class DEDPUL(LPU.models.lpu_model_base.LPUModelBase):
                 d_losses_train, d_losses_val, d_losses_test = DEDPUL.modified_train_NN(mix_data=mix_data, pos_data=pos_data,discriminator=discriminator,d_optimizer=d_optimizer,
                         mix_data_val=mix_data_val, pos_data_val=pos_data_val, mix_data_test=mix_data_test, pos_data_test=pos_data_test,
                         nnre_alpha=alpha,
+
                         d_scheduler=None, training_mode=training_mode, bayes=bayes, **train_nn_options)
                 if len(all_d_loss_train):
                     min_length = min(all_d_loss_train.shape[1], len(d_losses_train))
@@ -505,6 +506,10 @@ class DEDPUL(LPU.models.lpu_model_base.LPUModelBase):
         # while LPU datasets have lebel==0 for unlabeled data
         concat_l = 1 - concat_l
         all_l_test = 1 - all_l_test
+        
+        # setting the num_epochs to be what is passed in config file
+        train_nn_options['n_epochs'] = self.config.get('num_epochs')
+        train_nn_options['batch_size'] = self.config['batch_size']['train']
 
         alpha_posterior, n_in_unlabeled_posterior, n_in_unlabeled_posterior_test, preds,  preds_test, loss_dict = DEDPUL.modified_estimate_poster_cv(df=concat_X, target=concat_l, 
                                                                                                                                                      test_df=all_X_test, test_target=all_l_test,
