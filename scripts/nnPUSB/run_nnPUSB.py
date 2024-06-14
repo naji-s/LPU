@@ -8,12 +8,12 @@ import torch.optim
 import LPU.external_libs.nnPUSB
 import LPU.external_libs.nnPUSB.nnPU_loss
 import LPU.constants
-import LPU.models.uPU
+import LPU.models.uPU.uPU
 import LPU.utils.dataset_utils
 # import LPU.external_libs.nnPUSB.train
 import LPU.utils.utils_general
 import LPU.external_libs.nnPUSB.dataset
-import LPU.models.nnPUSB
+import LPU.models.nnPUSB.nnPUSB
 import LPU.utils.plot_utils
 
 torch.set_default_dtype(LPU.constants.DTYPE)
@@ -41,16 +41,16 @@ DEFAULT_CONFIG = {
         "val": 30000,
         "holdout": 30000
     },
-    "model": "3mlp",
-    "resample_model": "3mlp",
+    "model": "mlp",
+    "resample_model": "mlp",
     "ratios": {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        "test": 0.25,
-        "val": 0.1,
+        "test": 0.4,
+        "val": 0.05,
         "holdout": 0.0,
-        "train": 0.65
+        "train": 0.55
     },
 
     # "unlabeled": 100, # uncomment only if you use the original datasets for nnPUSB
@@ -96,9 +96,9 @@ def train_model(config=None):
     # assuming X always represents the features, and is saved 
     # as a property of the dataset object
     dim = dataloaders_dict['train'].dataset.X.shape[-1]
-    nnPUSB_model = LPU.models.nnPUSB.nnPUSB(config=config, dim=dim)
+    nnPUSB_model = LPU.models.nnPUSB.nnPUSB.nnPUSB(config=config, dim=dim)
     nnPUSB_model.set_C(dataloaders_dict['train'])
-    loss = LPU.models.uPU.select_loss(loss_name=config['loss'])
+    loss = LPU.models.uPU.uPU.select_loss(loss_name=config['loss'])
     optimizer = torch.optim.Adam([{
         'params': nnPUSB_model.parameters(),
         'lr': config['learning_rate'],
@@ -135,6 +135,12 @@ def train_model(config=None):
             best_scores_dict = copy.deepcopy(scores_dict)
             best_model_state = copy.deepcopy(nnPUSB_model.state_dict())
         LOG.info(f"Epoch {epoch}: {scores_dict}")
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+                        ray.train.report({
+                            'val_overall_loss': scores_dict['val']['overall_loss'],
+                            'epoch': epoch,
+                            })        
+
 
 
     

@@ -9,7 +9,7 @@ import torch.optim
 import LPU.constants
 import LPU.utils.dataset_utils
 import LPU.utils.utils_general
-import LPU.models.uPU
+import LPU.models.uPU.uPU
 import LPU.utils.plot_utils
 
 torch.set_default_dtype(LPU.constants.DTYPE)
@@ -40,10 +40,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.25,
-        'val': 0.1,
+        'test': 0.4,
+        'val': 0.05,
         'holdout': .0,
-        'train': .65, 
+        'train': .55, 
     },
 
 }
@@ -72,7 +72,7 @@ def train_model(config=None):
                                                                        label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
     X_example, _, _, _ = next(iter(dataloaders_dict['train']))
     dim = X_example.shape[-1]
-    uPU_model = LPU.models.uPU.uPU(config=config, dim=dim)
+    uPU_model = LPU.models.uPU.uPU.uPU(config=config, dim=dim)
     uPU_model.set_C(dataloaders_dict['train'])
 
     optimizer = torch.optim.Adam([{
@@ -80,8 +80,8 @@ def train_model(config=None):
         'lr': config.get('learning_rate', DEFAULT_CONFIG.get('learning_rate', None) if USE_DEFAULT_CONFIG else None)
     }])
     device = config.get('device', 'cpu')
-    loss_fn = LPU.models.uPU.uPUloss(prior=uPU_model.prior,
-                                         loss=LPU.models.uPU.select_loss('sigmoid'),
+    loss_fn = LPU.models.uPU.uPU.uPUloss(prior=uPU_model.prior,
+                                         loss=LPU.models.uPU.uPU.select_loss('sigmoid'),
                                          gamma=config.get('gamma', DEFAULT_CONFIG.get('gamma', None) if USE_DEFAULT_CONFIG else None),
                                          beta=config.get('beta', DEFAULT_CONFIG.get('beta', None) if USE_DEFAULT_CONFIG else None))
     num_epochs = config.get('epoch', DEFAULT_CONFIG.get('epoch', None) if USE_DEFAULT_CONFIG else None)
@@ -112,6 +112,11 @@ def train_model(config=None):
             best_epoch = epoch
             best_model_state = uPU_model.state_dict()
             best_scores_dict = scores_dict
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+                        ray.train.report({
+                            'val_overall_loss': scores_dict['val']['overall_loss'],
+                            'epoch': epoch,
+                            })        
 
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 

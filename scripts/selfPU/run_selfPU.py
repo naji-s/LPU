@@ -32,7 +32,7 @@ import numpy as np
 import LPU.constants
 import LPU.utils.dataset_utils
 import LPU.datasets.LPUDataset
-import LPU.models.mpe_model
+import LPU.models.MPE.mpe_model
 import LPU.utils.plot_utils
 import LPU.utils.utils_general
 
@@ -56,10 +56,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.25,
-        'val': 0.1,
+        'test': 0.4,
+        'val': 0.05,
         'holdout': .0,
-        'train': .65, 
+        'train': .55, 
     },
 
     "batch_size": {
@@ -364,6 +364,11 @@ def train_model(config=None):
             best_scores_dict = copy.deepcopy(scores_dict)
             best_model_state = copy.deepcopy(selfPU_model.state_dict())
 
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+                        ray.train.report({
+                            'val_overall_loss': scores_dict['val']['overall_loss'],
+                            'epoch': epoch,
+                            })        
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 
     model = selfPU_model

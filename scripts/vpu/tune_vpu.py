@@ -1,8 +1,10 @@
 import json
-import ray.tune
 import ray.train
+import ray.tune
+import ray.tune.schedulers
 import os
 import datetime
+import time
 
 import LPU.scripts
 import LPU.scripts.vpu
@@ -12,17 +14,20 @@ import LPU.utils.utils_general
 LOG = LPU.utils.utils_general.configure_logger(__name__)
 MODEL_NAME = 'vpu'
 
-def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None, random_state=None):
+def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
     # Configuration for hyperparameters to be tuned
     if random_state is None:
         LOG.warning("seed_num is None. Setting it to 0.")
         random_state = 0
     search_space = {
         "random_state": random_state,
-        "learning_rate": ray.tune.loguniform(1e-5, 1e-3),
+        "learning_rate": .01,
         "epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "batch_size": {
-            "train": ray.tune.choice([32, 64, 128]),
+            "train": ray.tune.choice([64]),
+            "test": ray.tune.choice([64]),
+            "val": ray.tune.choice([64]),
+            "holdout": ray.tune.choice([64])
         },
         "mix_alpha": ray.tune.uniform(0.1, 0.5),
         "lam": ray.tune.uniform(0.1, 0.9),
@@ -32,17 +37,25 @@ def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None,
         "val_overall_loss", "val_phi_loss", "val_reg_loss",
         "test_overall_loss", "test_phi_loss", "test_reg_loss"])
 
+    scheduler = ray.tune.schedulers.ASHAScheduler(
+        max_t=max_num_epochs,
+        grace_period=10,
+        reduction_factor=2)
 
+    execution_start_time = time.time()
     result = ray.tune.run(
         LPU.scripts.vpu.run_vpu.train_model,
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,
         metric='val_overall_loss',
+        scheduler=scheduler,
         mode='min',
         local_dir=results_dir,
         progress_reporter=reporter,
-        max_concurrent_trials=8)
+        )
+    execution_time = time.time() - execution_start_time
+    LOG.info(f"Execution time: {execution_time} seconds")
 
     best_trial = result.get_best_trial("val_overall_loss", "min", "last")
     best_trial_report = {
@@ -52,7 +65,8 @@ def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None,
         "test_overall_loss": best_trial.last_result["test_overall_loss"],
         "test_y_auc": best_trial.last_result["test_y_auc"],
         "test_y_accuracy": best_trial.last_result["test_y_accuracy"],
-        "test_y_APS": best_trial.last_result["test_y_APS"]}
+        "test_y_APS": best_trial.last_result["test_y_APS"]},
+    "Execution time": execution_time
     }    
     # Storing results in a JSON file
     EXPERIMENT_DATETIME = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

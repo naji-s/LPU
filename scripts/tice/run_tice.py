@@ -4,7 +4,7 @@ import torch
 
 import LPU.constants
 import LPU.utils.dataset_utils
-import LPU.models.tice
+import LPU.models.TiCE.tice
 import LPU.utils.plot_utils
 import LPU.utils.utils_general
 
@@ -16,6 +16,7 @@ DEFAULT_CONFIG = {
     "inducing_points_size": 32,
     "learning_rate": 0.01,
     "num_epochs": 50,
+    "stop_learning_lr": 1e-5,    
     "device": "cpu",
     "set_C_every_epoch": False,
     "epoch_block": 1, # Perform validation every EPOCH_BLOCK iterations
@@ -31,7 +32,6 @@ DEFAULT_CONFIG = {
         "neighbor_mode": "distance",
         "power_factor": 1,
         "invert_M_first": False,
-        "normalize": False
         },
     "out": None,
     "folds": None,
@@ -50,10 +50,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.25,
+        'test': 0.4,
         'val': 0.05,
         'holdout': .05,
-        'train': .65, 
+        'train': .5, 
     },
 
     "batch_size": {
@@ -87,7 +87,7 @@ def train_model(config=None):
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
     inducing_points_initial_vals = LPU.utils.dataset_utils.initialize_inducing_points(
         dataloaders_dict['train'], inducing_points_size)
-    tice_model = LPU.models.tice.Tice(
+    tice_model = LPU.models.TiCE.tice.Tice(
         config,
         inducing_points_initial_vals=inducing_points_initial_vals,
         training_size=len(dataloaders_dict['train'].dataset),
@@ -137,6 +137,19 @@ def train_model(config=None):
                 all_scores_dict[split][score_type].append(score_value)
 
         LOG.info(f"Epoch {epoch}: {scores_dict}")
+        # Check current learning rate
+        current_lr = optimizer.param_groups[0]['lr']
+        LOG.info(f"Current learning rate: {current_lr}")
+        # Stop if the learning rate is too low
+        if current_lr <= config['stop_learning_lr']:
+            print("Learning rate below threshold, stopping training.")
+            break
+
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+                        ray.train.report({
+                            'val_overall_loss': scores_dict['val']['overall_loss'],
+                            'epoch': epoch,
+                            'learning_rate': current_lr})        
 
 
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")

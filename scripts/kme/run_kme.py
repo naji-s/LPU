@@ -4,8 +4,9 @@ import torch
 
 import LPU.constants
 import LPU.utils.dataset_utils
-import LPU.models.geometric.KMEGGPC
+import LPU.models.geometric.kme.KMEGGPC
 import LPU.utils.plot_utils
+import LPU.utils.ray_utils
 import LPU.utils.utils_general
 
 torch.set_default_dtype(LPU.constants.DTYPE)
@@ -16,6 +17,7 @@ DEFAULT_CONFIG = {
     "inducing_points_size": 32,
     "learning_rate": 0.01,
     "num_epochs": 10,
+    "stop_learning_lr": 1e-5,
     "device": "cpu",
     "epoch_block": 1, # Perform validation every EPOCH_BLOCK iterations
     "kernel_mode": 2,
@@ -30,7 +32,6 @@ DEFAULT_CONFIG = {
         "neighbor_mode": "distance",
         "power_factor": 1,
         "invert_M_first": False,
-        "normalize": False
     },
     "dataset_name": "animal_no_animal",  # fashionMNIST
     "dataset_kind": "LPU",
@@ -40,10 +41,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.3,
+        'test': 0.4,
         'val': 0.05,
         'holdout': .05,
-        'train': .6, 
+        'train': .5, 
     },
 
     "batch_size": {
@@ -64,12 +65,8 @@ try:
 except ImportError:
     LOG.warning("Ray is not available. Please install Ray to enable distributed training.")
     RAY_AVAILABLE = False
-
+            
 def train_model(config=None):
-    if config is None:
-        config = {}
-    # Load the base configuration
-    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
     LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
@@ -77,7 +74,7 @@ def train_model(config=None):
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
     inducing_points_initial_vals = LPU.utils.dataset_utils.initialize_inducing_points(
         dataloaders_dict['train'], inducing_points_size)
-    kme_model = LPU.models.geometric.KMEGGPC.KMEModelGGPC(
+    kme_model = LPU.models.geometric.kme.KMEGGPC.KMEModelGGPC(
         config,
         inducing_points_initial_vals=inducing_points_initial_vals,
         training_size=len(dataloaders_dict['train'].dataset),
@@ -106,18 +103,17 @@ def train_model(config=None):
         scores_dict['train'].update(scores_dict_item)
         all_scores_dict['train']['epochs'].append(epoch)
 
-        if epoch % epoch_block == 0:
-            scores_dict['val'] = kme_model.validate(dataloaders_dict['val'], model=kme_model.gp_model, loss_fn=kme_model.loss_fn)
-            all_scores_dict['val']['epochs'].append(epoch)
-            # Update best validation loss and epoch
-            if scores_dict['val']['overall_loss'] < best_val_loss:
-                best_val_loss = scores_dict['val']['overall_loss']
-                best_epoch = epoch
-                best_scores_dict = copy.deepcopy(scores_dict)
-                best_model_state = copy.deepcopy(kme_model.state_dict())
+        scores_dict['val'] = kme_model.validate(dataloaders_dict['val'], model=kme_model.gp_model, loss_fn=kme_model.loss_fn)
+        all_scores_dict['val']['epochs'].append(epoch)
+        # Update best validation loss and epoch
+        if scores_dict['val']['overall_loss'] < best_val_loss:
+            best_val_loss = scores_dict['val']['overall_loss']
+            best_epoch = epoch
+            best_scores_dict = copy.deepcopy(scores_dict)
+            best_model_state = copy.deepcopy(kme_model.state_dict())
 
-            scheduler.step(scores_dict['val']['overall_loss'])
-            # Update best validation loss and epoch
+        scheduler.step(scores_dict['val']['overall_loss'])
+        # Update best validation loss and epoch
 
         for split in dataloaders_dict.keys():
             for score_type, score_value in scores_dict[split].items():
@@ -126,7 +122,18 @@ def train_model(config=None):
                 all_scores_dict[split][score_type].append(score_value)
 
         LOG.info(f"Epoch {epoch}: {scores_dict}")
-
+        # Check current learning rate
+        current_lr = optimizer.param_groups[0]['lr']
+        LOG.info(f"Current learning rate: {current_lr}")
+        # Stop if the learning rate is too low
+        if current_lr <= config['stop_learning_lr']:
+            print("Learning rate below threshold, stopping training.")
+            break
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+                ray.train.report({
+                    'val_overall_loss': scores_dict['val']['overall_loss'],
+                    'epoch': epoch,
+                    'learning_rate': current_lr})
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 
     model = kme_model
@@ -150,6 +157,20 @@ def train_model(config=None):
     else:
         return all_scores_dict, best_epoch
 
+def train():
+    if config is None:
+        config = {}
+    # Load the base configuration
+    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    train_with_ray = config.get('train_with_ray', False)
+    if train_with_ray and ray.is_initialized():
+        ray.init()
+    config = DEFAULT_CONFIG
+    trainer = ray.train.Trainer(backend="torch", num_workers=1)
+    trainer.start()
+    trainer.run(train_func, config=config, callbacks=[LPU.utils.ray_utils.SaveBestModelCallback(dat)])
+    trainer.shutdown()
+    
 if __name__ == "__main__":
-    results, best_epoch = train_model()
+    results, best_epoch = train()
     LPU.utils.plot_utils.plot_scores(results, best_epoch=best_epoch, loss_type='overall_loss')

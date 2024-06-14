@@ -5,11 +5,11 @@ import types
 import numpy as np
 import torch.optim
 import LPU.constants
-import LPU.models.uPU
+import LPU.models.uPU.uPU
 import LPU.utils.dataset_utils
 import LPU.utils.dataset_utils
 import LPU.utils.utils_general
-import LPU.models.nnPU
+import LPU.models.nnPU.nnPU
 import LPU.utils.plot_utils
 import LPU.external_libs.nnPUSB
 import LPU.external_libs.nnPUSB.nnPU_loss
@@ -43,10 +43,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.3,
-        'val': 0.1,
+        'test': 0.4,
+        'val': 0.05,
         'holdout': .0,
-        'train': .6, 
+        'train': .55, 
     },
 
 }
@@ -77,7 +77,7 @@ def train_model(config=None):
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
                                                                        label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
     dim = dataloaders_dict['train'].dataset.X.shape[-1]
-    nnPU_model = LPU.models.nnPU.nnPU(config=config, dim=dim)
+    nnPU_model = LPU.models.nnPU.nnPU.nnPU(config=config, dim=dim)
     nnPU_model.set_C(dataloaders_dict['train'])
 
     optimizer = torch.optim.Adam([{
@@ -86,7 +86,7 @@ def train_model(config=None):
     }])
     device = config.get('device', 'cpu')
     loss_fn = LPU.external_libs.nnPUSB.nnPU_loss.nnPUloss(prior=nnPU_model.prior,
-                                         loss=LPU.models.uPU.select_loss('sigmoid'),
+                                         loss=LPU.models.uPU.uPU.select_loss('sigmoid'),
                                          gamma=gamma,
                                          beta=beta)
     num_epochs = config.get('epoch', DEFAULT_CONFIG.get('epoch', None) if USE_DEFAULT_CONFIG else None)
@@ -117,6 +117,12 @@ def train_model(config=None):
             best_epoch = epoch
             best_scores_dict = copy.deepcopy(scores_dict)
             best_model_state = copy.deepcopy(nnPU_model.state_dict())
+        # Report metrics if executed under Ray Tune
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+                        ray.train.report({
+                            'val_overall_loss': scores_dict['val']['overall_loss'],
+                            'epoch': epoch,
+                            })        
 
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 

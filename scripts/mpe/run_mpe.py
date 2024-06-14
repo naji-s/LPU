@@ -18,7 +18,7 @@ import numpy as np
 import LPU.constants
 import LPU.utils.dataset_utils
 import LPU.datasets.LPUDataset
-import LPU.models.mpe_model
+import LPU.models.MPE.mpe_model
 import LPU.utils.plot_utils
 import LPU.utils.utils_general    
 
@@ -62,10 +62,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.3,
+        'test': 0.4,
         'val': 0.05,
-        'holdout': .05,
-        'train': .6, 
+        'holdout': .0,
+        'train': .55, 
     },
     "batch_size": {
         "train": 64,
@@ -128,32 +128,32 @@ def train_model(config=None):
     if config is None:
         config = {}
     # Load the base configuration
-    base_config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
     LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
     criterion = torch.nn.CrossEntropyLoss()
 
-    mpe_model = LPU.models.mpe_model.MPE(base_config)
+    mpe_model = LPU.models.MPE.mpe_model.MPE(config)
 
-    mpe_dataloaders_dict = create_dataloaders_dict_mpe(base_config)
+    mpe_dataloaders_dict = create_dataloaders_dict_mpe(config)
 
     mpe_model.initialize_model(mpe_dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
     train_unlabeled_size = len(mpe_dataloaders_dict['train']['UDataset'].dataset.data)
  
-    if base_config['optimizer'] == "SGD":
-        optimizer = torch.optim.SGD(mpe_model.net.parameters(), lr=base_config['lr'], momentum=base_config['momentum'], weight_decay=base_config['wd'])
-    elif base_config['optimizer'] == "Adam":
-        optimizer = torch.optim.Adam(mpe_model.net.parameters(), lr=base_config['lr'], weight_decay=base_config['wd'])
-    elif base_config['optimizer'] == "AdamW":
-        optimizer = torch.optim.AdamW(mpe_model.net.parameters(), lr=base_config['lr'])
+    if config['optimizer'] == "SGD":
+        optimizer = torch.optim.SGD(mpe_model.net.parameters(), lr=config['lr'], momentum=config['momentum'], weight_decay=config['wd'])
+    elif config['optimizer'] == "Adam":
+        optimizer = torch.optim.Adam(mpe_model.net.parameters(), lr=config['lr'], weight_decay=config['wd'])
+    elif config['optimizer'] == "AdamW":
+        optimizer = torch.optim.AdamW(mpe_model.net.parameters(), lr=config['lr'])
 
     scores_dict = {}
     all_scores_dict = {split: {'epochs': []} for split in ['train', 'val']}
 
     ## Train in the beginning for warm start
-    if base_config['warm_start']:
-        for epoch in range(base_config['warm_start_epochs']):
+    if config['warm_start']:
+        for epoch in range(config['warm_start_epochs']):
             scores_dict['train'] = mpe_model.warm_up_one_epoch(epoch=epoch, p_trainloader=mpe_dataloaders_dict['train']['PDataset'],
                                                        u_trainloader=mpe_dataloaders_dict['train']['UDataset'],
                                                        optimizer=optimizer, criterion=criterion, valid_loader=None)
@@ -164,7 +164,7 @@ def train_model(config=None):
                                                 criterion=criterion, threshold=0.5)
             all_scores_dict['val']['epochs'].append(epoch)
 
-            if base_config['estimate_alpha']:
+            if config['estimate_alpha']:
                 mpe_model.alpha_estimate = mpe_model.estimate_alpha(p_holdoutloader=mpe_dataloaders_dict['holdout']['PDataset'],
                                                                     u_holdoutloader=mpe_dataloaders_dict['holdout']['UDataset'])
                 mpe_model.set_C(l_mean=len(mpe_dataloaders_dict['holdout']['PDataset']) / (len(mpe_dataloaders_dict['holdout']['UDataset']) + len(mpe_dataloaders_dict['holdout']['PDataset'])))
@@ -179,18 +179,18 @@ def train_model(config=None):
     best_val_loss = float('inf')
     best_epoch = -1
     best_model_state = copy.deepcopy(mpe_model.state_dict())
-    for epoch in range(base_config['epochs']):
+    for epoch in range(config['epochs']):
         train_scores = mpe_model.train_one_epoch(epoch=epoch, p_trainloader=mpe_dataloaders_dict['train']['PDataset'],
                                                  u_trainloader=mpe_dataloaders_dict['train']['UDataset'],
                                                  optimizer=optimizer, criterion=criterion,
                                                  train_unlabeled_size=train_unlabeled_size)
         scores_dict['train'] = train_scores
-        all_scores_dict['train']['epochs'].append(epoch + base_config['warm_start_epochs'])
+        all_scores_dict['train']['epochs'].append(epoch + config['warm_start_epochs'])
 
         scores_dict['val'] = mpe_model.validate(epoch, p_validloader=mpe_dataloaders_dict['val']['PDataset'],
                                                 u_validloader=mpe_dataloaders_dict['val']['UDataset'],
                                                 criterion=criterion, threshold=0.5)
-        all_scores_dict['val']['epochs'].append(epoch + base_config['warm_start_epochs'])
+        all_scores_dict['val']['epochs'].append(epoch + config['warm_start_epochs'])
 
         # Update best validation loss and epoch
         if scores_dict['val']['overall_loss'] < best_val_loss:
@@ -204,11 +204,15 @@ def train_model(config=None):
                     all_scores_dict[split][score_type] = []
                 all_scores_dict[split][score_type].append(score_value)
 
-        if base_config['estimate_alpha']:
+        if config['estimate_alpha']:
             mpe_model.alpha_estimate = mpe_model.estimate_alpha(mpe_dataloaders_dict['holdout']['PDataset'], mpe_dataloaders_dict['holdout']['UDataset'])
             mpe_model.set_C(l_mean=len(mpe_dataloaders_dict['holdout']['PDataset']) / (len(mpe_dataloaders_dict['holdout']['UDataset']) + len(mpe_dataloaders_dict['holdout']['PDataset'])))
-
+            
         LOG.info(f"Train Epoch {epoch}: {scores_dict}")
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+                        ray.train.report({
+                            'val_overall_loss': scores_dict['val']['overall_loss'],
+                            'epoch': epoch,})        
 
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 

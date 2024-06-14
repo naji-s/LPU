@@ -8,7 +8,7 @@ import sys
 sys.path.append('LPU/external_libs/SAR_PU')
 sys.path.append('LPU/external_libs/SAR_PU/sarpu')
 sys.path.append('LPU/external_libs/SAR_PU/sarpu/sarpu')
-import LPU.models.sarpu_em
+import LPU.models.SARPU.sarpu_em
 import LPU.utils.utils_general
 import LPU.utils.dataset_utils
 import LPU.utils.plot_utils
@@ -66,10 +66,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        "test": 0.3,
+        "test": 0.4,
         "val": 0.,
         "holdout": 0.0,
-        "train": 0.7
+        "train": 0.6
     },
     "batch_size": {
         "train": None,
@@ -108,7 +108,7 @@ def train_model(config=None):
 
     lpu_dataset = LPU.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
-    sarpu_em_model = LPU.models.sarpu_em.SARPU(config, training_size=len(dataloaders_dict['train'].dataset))
+    sarpu_em_model = LPU.models.SARPU.sarpu_em.SARPU(config, training_size=len(dataloaders_dict['train'].dataset))
 
     all_scores_dict = {split: {} for split in ['train', 'val']}
     scores_dict = {split: {} for split in ['train', 'val']}

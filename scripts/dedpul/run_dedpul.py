@@ -14,7 +14,7 @@ import LPU.utils.utils_general
 import LPU.constants
 import LPU.datasets.LPUDataset
 import LPU.utils.dataset_utils
-import LPU.models.dedpul
+import LPU.models.dedpul.dedpul
 import LPU.utils.plot_utils
 import LPU.utils.utils_general
 
@@ -74,16 +74,19 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.3,
-        'val': 0.1,
+        'test': 0.4,
+        'val': 0.05,
         'holdout': .0,
-        'train': .6, 
+        'train': .55, 
     },
     'train_nn_options': 
     { 
         'loss_function': 'log',
         'n_early_stop': 20,
         'disp': False,
+        'beta': 0.,
+        'gamma': 1.,
+        'bayes_weight': 1e-5,   
     }
 }
 
@@ -91,12 +94,7 @@ DEFAULT_CONFIG = {
 def train_model(config=None):
     if config is None:
         config = {}
-    # Load the base configuration
-    # base_config = LPU.utils.utils_general.load_and_process_config(config['base_config_file_path'])
-    # Update the base configuration with the tuning configuration for Ray if it is available
 
-    if config is None:
-        config = {}
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
     if 'random_state' in config and config['random_state'] is not None:
@@ -110,7 +108,7 @@ def train_model(config=None):
     # Initialize training components using the combined configuration
     torch.set_default_dtype(LPU.constants.DTYPE)
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
-    dedpul_model = LPU.models.dedpul.DEDPUL(config)
+    dedpul_model = LPU.models.dedpul.dedpul.DEDPUL(config)
     
     # Train and report metrics
     scores_dict = dedpul_model.train(

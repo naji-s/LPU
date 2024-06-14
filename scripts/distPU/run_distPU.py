@@ -46,10 +46,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.3,
-        'val': 0.1,
+        'test': 0.4,
+        'val': 0.05,
         'holdout': .0,
-        'train': .6, 
+        'train': .55, 
     },
 
     "dataset_kind": "LPU",
@@ -85,24 +85,24 @@ def train_model(config=None):
         config = {}
 
     # Load the base configuration
-    base_config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
     LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
-    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(base_config, transform=None, target_transform=None)
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config, transform=None, target_transform=None)
 
-    if base_config['dataset_kind'] == 'LPU':
+    if config['dataset_kind'] == 'LPU':
         dim = dataloaders_dict['train'].dataset.X.shape[1]
-    elif base_config['dataset_kind'] == 'distPU':
+    elif config['dataset_kind'] == 'distPU':
         dim = torch.flatten(dataloaders_dict['train'].dataset.X, 1).shape[1]
 
-    distPU_model = LPU.models.distPU.distPU(base_config, dim)
+    distPU_model = LPU.models.distPU.distPU(config, dim)
     distPU_model.set_C(dataloaders_dict['train'])
 
-    loss_fn = LPU.models.distPU.create_loss(base_config, prior=distPU_model.prior)
-    warm_up_lr = base_config['warm_up_lr']
-    warm_up_weight_decay = base_config['warm_up_weight_decay']
-    warm_up_epochs = base_config['warm_up_epochs']
+    loss_fn = LPU.models.distPU.create_loss(config, prior=distPU_model.prior)
+    warm_up_lr = config['warm_up_lr']
+    warm_up_weight_decay = config['warm_up_weight_decay']
+    warm_up_epochs = config['warm_up_epochs']
     optimizer = torch.optim.Adam(
         distPU_model.parameters(), lr=warm_up_lr, weight_decay=warm_up_weight_decay
     )
@@ -140,17 +140,22 @@ def train_model(config=None):
             best_epoch = epoch
             best_scores_dict = copy.deepcopy(scores_dict)
             best_model_state = copy.deepcopy(distPU_model.state_dict())
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+                        ray.train.report({
+                            'val_overall_loss': scores_dict['val']['overall_loss'],
+                            'epoch': epoch,
+                            })        
 
     # Training
     mixup_dataset = LPU.models.distPU.MixupDataset()
     mixup_dataset.update_psudos(dataloaders_dict['train'], distPU_model.model, distPU_model.device)
 
-    lr = base_config['lr']
-    weight_decay = base_config['weight_decay']
-    pu_epochs = base_config['pu_epochs']
+    lr = config['lr']
+    weight_decay = config['weight_decay']
+    pu_epochs = config['pu_epochs']
 
     for epoch in range(pu_epochs):
-        co_entropy = update_co_entropy(base_config, epoch)
+        co_entropy = update_co_entropy(config, epoch)
         LOG.info(f"Updating co-entropy: {co_entropy:.5f}")
 
         LOG.info("Training with mixup")

@@ -1,9 +1,11 @@
 import json
 import os
 import datetime
+import time
 
-import ray.tune
 import ray.train
+import ray.tune
+import ray.tune.schedulers
 
 import LPU.scripts
 import LPU.scripts.selfPU
@@ -13,14 +15,14 @@ import LPU.utils.utils_general
 LOG = LPU.utils.utils_general.configure_logger(__name__)
 MODEL_NAME = 'selfPU'
 
-def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None, random_state=None):
+def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
     # Configuration for hyperparameters to be tuned
     if random_state is None:
         LOG.warning("seed_num is None. Setting it to 0.")
         random_state = 0
     search_space = {
         "random_state": random_state,
-        "lr": ray.tune.loguniform(1e-4, 1e-1),
+        "lr": .01,
         "weight_decay": ray.tune.loguniform(1e-6, 1e-3),
         "epochs": ray.tune.randint(max_num_epochs, max_num_epochs + 1),
         "weight": ray.tune.uniform(0.5, 2.0),
@@ -35,22 +37,37 @@ def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None,
         "top2": ray.tune.uniform(0.4, 0.8),
         "gamma": ray.tune.loguniform(1e-3, 0.1),
         "num_p": ray.tune.randint(500, 2000),
+        "batch_size": {
+            "train": ray.tune.choice([64]),
+            "test": ray.tune.choice([64]),
+            "val": ray.tune.choice([64]),
+            "holdout": ray.tune.choice([64])
+        },
     }
 
     reporter = ray.tune.CLIReporter(metric_columns=[
         "val_overall_loss", "val_y_auc", "val_y_accuracy", "val_y_APS",
         "test_overall_loss", "test_y_auc", "test_y_accuracy", "test_y_APS"])
+    scheduler = ray.tune.schedulers.ASHAScheduler(
+        max_t=max_num_epochs,
+        grace_period=10,
+        reduction_factor=2)
 
+    execution_start_time = time.time()
     result = ray.tune.run(
         LPU.scripts.selfPU.run_selfPU.train_model,
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,
         metric='val_overall_loss',
+        scheduler=scheduler,
         mode='min',
         local_dir=results_dir,
         progress_reporter=reporter,
-        max_concurrent_trials=8)
+        )
+
+    execution_time = time.time() - execution_start_time
+    LOG.info(f"Execution time: {execution_time} seconds")
 
     best_trial = result.get_best_trial("val_overall_loss", "min", "last")
     best_trial_report = {
@@ -60,7 +77,8 @@ def main(num_samples=50, max_num_epochs=100, gpus_per_trial=0, results_dir=None,
         "test_overall_loss": best_trial.last_result["test_overall_loss"],
         "test_y_auc": best_trial.last_result["test_y_auc"],
         "test_y_accuracy": best_trial.last_result["test_y_accuracy"],
-        "test_y_APS": best_trial.last_result["test_y_APS"]}
+        "test_y_APS": best_trial.last_result["test_y_APS"]},
+    "Execution time": execution_time,
     }
     # Storing results in a JSON file
     EXPERIMENT_DATETIME = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

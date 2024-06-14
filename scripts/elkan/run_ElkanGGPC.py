@@ -5,7 +5,7 @@ import torch
 
 import LPU.constants
 import LPU.utils.dataset_utils
-import LPU.models.geometric.elkanGGPC
+import LPU.models.geometric.elkan.elkanGGPC
 import LPU.utils.plot_utils
 import LPU.utils.utils_general
 
@@ -17,6 +17,7 @@ DEFAULT_CONFIG = {
     "inducing_points_size": 32,
     "learning_rate": 0.01,
     "num_epochs": 10,
+    "stop_learning_lr": 1e-5,
     "device": "cpu",
     "epoch_block": 1,
     "intrinsic_kernel_params": {
@@ -30,7 +31,6 @@ DEFAULT_CONFIG = {
         "neighbor_mode": "distance",
         "power_factor": 1,
         "invert_M_first": False,
-        "normalize": False
     },
     "dataset_name": "animal_no_animal",  # fashionMNIST
     "dataset_kind": "LPU",
@@ -40,10 +40,10 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.3,
+        'test': 0.4,
         'val': 0.05,
         'holdout': .05,
-        'train': .60, 
+        'train': .50, 
     },
 
     "batch_size": {
@@ -70,24 +70,24 @@ def train_model(config=None):
     if config is None:
         config = {}
     # Load the base configuration
-    base_config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
     LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
 
-    inducing_points_size = base_config['inducing_points_size']
-    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(base_config)
+    inducing_points_size = config['inducing_points_size']
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
     inducing_points_initial_vals = LPU.utils.dataset_utils.initialize_inducing_points(
         dataloaders_dict['train'], inducing_points_size)
-    elkan_model = LPU.models.geometric.elkanGGPC.ElkanGGPC(
-        base_config,
+    elkan_model = LPU.models.geometric.elkan.elkanGGPC.ElkanGGPC(
+        config,
         inducing_points_initial_vals=inducing_points_initial_vals,
         training_size=len(dataloaders_dict['train'].dataset),
         num_features=inducing_points_initial_vals.shape[-1]
     )
 
-    learning_rate = base_config['learning_rate']
-    num_epochs = base_config['num_epochs']
-    epoch_block = base_config['epoch_block']
+    learning_rate = config['learning_rate']
+    num_epochs = config['num_epochs']
+    epoch_block = config['epoch_block']
     optimizer = torch.optim.Adam([{
         'params': elkan_model.parameters(),
         'lr': learning_rate
@@ -108,17 +108,17 @@ def train_model(config=None):
         scores_dict['train'].update(scores_dict_item)
         all_scores_dict['train']['epochs'].append(epoch)
 
-        if epoch % epoch_block == 0:
-            scores_dict['val'] = elkan_model.validate(dataloaders_dict['val'], model=elkan_model.gp_model, loss_fn=elkan_model.loss_fn)
-            all_scores_dict['val']['epochs'].append(epoch)
-            # Update best validation loss and epoch
-            if scores_dict['val']['overall_loss'] < best_val_loss:
-                best_val_loss = scores_dict['val']['overall_loss']
-                best_epoch = epoch
-                best_scores_dict = copy.deepcopy(scores_dict)
-                best_model_state = copy.deepcopy(elkan_model.state_dict())
+        scores_dict['val'] = elkan_model.validate(dataloaders_dict['val'], model=elkan_model.gp_model, loss_fn=elkan_model.loss_fn)
+        all_scores_dict['val']['epochs'].append(epoch)
+        # Update best validation loss and epoch
+        if scores_dict['val']['overall_loss'] < best_val_loss:
+            best_val_loss = scores_dict['val']['overall_loss']
+            best_epoch = epoch
+            best_scores_dict = copy.deepcopy(scores_dict)
+            best_model_state = copy.deepcopy(elkan_model.state_dict())
 
-            scheduler.step(scores_dict['val']['overall_loss'])
+        scheduler.step(scores_dict['val']['overall_loss'])
+            
         for split in dataloaders_dict.keys():
             for score_type, score_value in scores_dict[split].items():
                 if score_type not in all_scores_dict[split]:
@@ -127,6 +127,18 @@ def train_model(config=None):
 
 
         LOG.info(f"Epoch {epoch}: {scores_dict}")
+        # Check current learning rate
+        current_lr = optimizer.param_groups[0]['lr']
+        LOG.info(f"Current learning rate: {current_lr}")
+        # Stop if the learning rate is too low
+        if current_lr <= config['stop_learning_lr']:
+            print("Learning rate below threshold, stopping training.")
+            break
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+                        ray.train.report({
+                            'val_overall_loss': scores_dict['val']['overall_loss'],
+                            'epoch': epoch,
+                            'learning_rate': current_lr})        
 
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 
