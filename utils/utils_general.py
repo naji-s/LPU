@@ -1,3 +1,4 @@
+import argparse
 import logging
 import random
 
@@ -93,3 +94,17 @@ def flatten_dict(d, parent_key='', sep='_'):
         else:
             items.append((new_key, v))
     return dict(items)
+
+def tune_parse_args():
+    parser = argparse.ArgumentParser(description="Tune the dedpul model.")
+    parser.add_argument("--num_samples", type=int, default=100,
+                        help="Number of samples to run.")
+    parser.add_argument("--max_num_epochs", type=int, default=200,
+                        help="Maximum number of epochs to run.")
+    parser.add_argument("--gpus_per_trial", type=int, default=0,
+                        help="Number of GPUs per trial.")
+    parser.add_argument("--results_dir", type=str, default=None,
+                        help="Directory to store the results.")
+    parser.add_argument("--random_state", type=int, default=None,
+                        help="Random state to set.")
+    return parser.parse_args()
