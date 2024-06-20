@@ -18,7 +18,7 @@ import LPU.models.lpu_model_base
 import LPU.constants
 import LPU.datasets.animal_no_animal.animal_no_animal_utils
 import LPU.models.lpu_model_base
-import LPU.models.geometric.psychm.psychmGGPC
+import LPU.models.geometric.PsychM.PsychM
 import LPU.utils.dataset_utils
 import LPU.models.geometric.GVGP
 import LPU.utils.utils_general  
@@ -27,11 +27,47 @@ import LPU.utils.manifold_utils
 # Set up logging configuration
 # logging.basicConfig(level=logging.INFO)  # Set the logging level as per your requirement
 
+DEFAULT_CONFIG = {
+    "inducing_points_size": 32,
+    "learning_rate": 0.01,
+    "num_epochs": 10,
+    "stop_learning_lr": 1e-6,
+    "device": "cpu",
+    "epoch_block": 1,
+    "intrinsic_kernel_params": {
+        "normed": False,
+        "kernel_type": "laplacian",
+        "heat_temp": 0.01,
+        "noise_factor": 0.0,
+        "amplitude": 0.5,
+        "n_neighbor": 5,
+        "lengthscale": 0.3,
+        "neighbor_mode": "distance",
+        "power_factor": 1,
+        "invert_M_first": False,
+    },
+    "dataset_name": "animal_no_animal",
+    "dataset_kind": "LPU",
+    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
+    "ratios": {
+        "test": 0.4,
+        "val": 0.05,
+        "holdout": 0.0,
+        "train": 0.55
+    },
+    "batch_size": {
+        "train": 64,
+        "test": 64,
+        "val": 64,
+        "holdout": 64
+    }
+}
+
 # Create a logger instance
 LOG = LPU.utils.utils_general.configure_logger(__name__)
  
 
-class PsychMGP(LPU.models.geometric.geometric_base.GeometricGPLPUBase): 
+class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase): 
     
     class CustomLikelihood(gpytorch.likelihoods.Likelihood):
         SCALE = 1.

@@ -1,8 +1,8 @@
 import LPU.models.geometric.geometric_base
 
-class ElkanGGPCEstimator(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
+class ElkanEstimator(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
     def __init__(self, hold_out_ratio=0.1, **kwargs):
-        raise NotImplementedError("ElkanGGPCEstimator is not fully implemented yet.")
+        raise NotImplementedError("ElkanEstimator is not fully implemented yet.")
     def fit(self, X=None, y=None, n_inducing_points = 100):
         """
         L: whether a data point is labeled or not

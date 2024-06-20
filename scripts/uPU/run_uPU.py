@@ -15,38 +15,7 @@ import LPU.utils.plot_utils
 torch.set_default_dtype(LPU.constants.DTYPE)
 
 USE_DEFAULT_CONFIG = False
-DEFAULT_CONFIG = {
-    "device": "cpu",
-    "dataset_name": "animal_no_animal",
-    "labeled": 0,
-    "unlabeled": 0,
-    "epoch": 100,
-    "beta": 0.0,
-    "gamma": 1.0,
-    "learning_rate": 0.0001,
-    "loss": "sigmoid",
-    "model": "mlp",
-    "out": "LPU/scripts/uPU/checkpoints",
-    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
-    "dataset_kind": "LPU",
-    "batch_size": {
-        "train": 64,
-        "test": None,
-        "val": None,
-        "holdout": None
-    },
-    'ratios': 
-    {
-        # *** NOTE ***
-        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
-        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.4,
-        'val': 0.05,
-        'holdout': .0,
-        'train': .55, 
-    },
 
-}
 
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
@@ -60,13 +29,22 @@ except ImportError:
     LOG.warning("Ray is not available. Please install Ray to enable distributed training, and tuning")
     RAY_AVAILABLE = False
 
-def train_model(config=None):
+def train_model(config=None, dataloaders_dict=None):
     if config is None:
         config = {}
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
+    if config['set_seed']:
+        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
+        LPU.utils.utils_general.set_seed(seed)
+
+
+    if dataloaders_dict is None:
+        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+    
+
+
 
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
                                                                        label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)

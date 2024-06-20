@@ -19,6 +19,50 @@ import LPU.external_libs.distPU.models.modelForCIFAR10
 import LPU.external_libs.distPU.models.modelForFMNIST
 import LPU.utils.auxiliary_models
 
+DEFAULT_CONFIG = {
+    "device": "cpu",
+    "dataset_name": "animal_no_animal",  # fmnist
+    "datapath": None,  # data/FMNIST_data
+    "num_labeled": None,  # 10000
+    "num_workers": 1,
+    "loss": "Dist-PU",
+    "data_generating_process": "SS",
+    "warm_up_lr": 0.001,
+    "lr": 0.001,
+    "warm_up_weight_decay": 0.005,
+    "weight_decay": 0.001,
+    "optimizer": "adam",
+    "schedular": "cos-ann",
+    "entropy": 1,
+    "co_mu": 0.002,
+    "co_entropy": 0.004,
+    "alpha": 6.0,
+    "co_mix_entropy": 0.04,
+    "co_mixup": 5.0,
+    "warm_up_epochs": 10,
+    "pu_epochs": 10,
+    'ratios': 
+    {
+        # *** NOTE ***
+        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+        'test': 0.4,
+        'val': 0.05,
+        'holdout': .0,
+        'train': .55, 
+    },
+
+    "dataset_kind": "LPU",
+    "batch_size": 
+    {
+        "train": 64,
+        "test": 64,
+        "val": 64,
+        "holdout": 64
+    },
+    "best_model_loc": "/Users/naji/phd_codebase/LPU/scripts/distPU/best_model_checkpoints"
+}
+
 LOG = logging.getLogger(__name__)
 
 class MixupDataset():

@@ -13,10 +13,10 @@ import LPU.models.lpu_model_base
 import LPU.external_libs.PU_learning.estimator
 import LPU.external_libs.PU_learning.train_PU
 import LPU.constants
-import LPU.models.MPE.mpe_model
+import LPU.models.MPE.MPE
 
     
-class DEDPUL(LPU.models.MPE.mpe_model.MPE):
+class DEDPUL(LPU.models.MPE.MPE.MPE):
     def __init__(self, config):
         super(DEDPUL, self).__init__(config)
 

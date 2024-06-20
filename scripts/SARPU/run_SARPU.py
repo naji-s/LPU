@@ -8,7 +8,7 @@ import sys
 sys.path.append('LPU/external_libs/SAR_PU')
 sys.path.append('LPU/external_libs/SAR_PU/sarpu')
 sys.path.append('LPU/external_libs/SAR_PU/sarpu/sarpu')
-import LPU.models.SARPU.sarpu_em
+import LPU.models.SARPU.SARPU
 import LPU.utils.utils_general
 import LPU.utils.dataset_utils
 import LPU.utils.plot_utils
@@ -20,64 +20,7 @@ import LPU.external_libs.SAR_PU.sarpu.sarpu
 torch.set_default_dtype(LPU.constants.DTYPE)
 
 USE_DEFAULT_CONFIG = False
-DEFAULT_CONFIG = {
-    "inducing_points_size": 32,
-    "learning_rate": 0.001,
-    "num_epochs": 5,
-    "device": "cpu",
-    "epoch_block": 1,
-    "dataset_name": "animal_no_animal",  # could also be fashionMNIST
-    "dataset_kind": "LPU",
-    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
 
-    # setting up parameters for the classification model of sar_pu
-    "SAR_PU_classification_model": 'logistic',
-    "svm_params": 
-        {
-        'tol': 1e-4,
-        'C': 1.0,
-        'kernel': 'rbf', 
-        'degree': 3, 
-        'gamma': 'scale',
-        'class_weight': None,
-        'random_state': None,  
-         'max_iter':-1, 
-         'cache_size':200,
-         'decision_function_shape': 'ovr', 
-         'verbose': 0    
-        },
-    'logistic_params':
-        {'penalty': 'l2', 
-         'dual': False, 
-         'tol':1e-4, 
-         'C': 1.0,
-         'fit_intercept': True, 
-         'intercept_scaling': 1, 
-         'class_weight': None,
-         'random_state': None, 
-         'solver': 'liblinear', 
-         'max_iter': 100,
-         'multi_class': 'ovr', 
-         'verbose': 0, 
-         'warm_start': False, 
-         'n_jobs': 1
-        },
-    "ratios": {
-        # *** NOTE ***
-        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
-        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        "test": 0.4,
-        "val": 0.,
-        "holdout": 0.0,
-        "train": 0.6
-    },
-    "batch_size": {
-        "train": None,
-        "test": None,
-        "val": None,
-        "holdout": None
-    }
-}
 
 
 ORIGINAL_LOG_FUNC = np.log
@@ -96,19 +39,28 @@ except ImportError:
     LOG.warning("Ray is not available. Please install Ray to enable distributed training.")
     RAY_AVAILABLE = False
 
-def train_model(config=None):
-
-
+def train_model(config=None, dataloaders_dict=None):
     if config is None:
         config = {}
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
+    if config['set_seed']:
+        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
+        LPU.utils.utils_general.set_seed(seed)
+
+
+    if dataloaders_dict is None:
+        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+    
+
+
+
+
 
     lpu_dataset = LPU.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
-    sarpu_em_model = LPU.models.SARPU.sarpu_em.SARPU(config, training_size=len(dataloaders_dict['train'].dataset))
+    sarpu_em_model = LPU.models.SARPU.SARPU.SARPU(config, training_size=len(dataloaders_dict['train'].dataset))
 
     all_scores_dict = {split: {} for split in ['train', 'val']}
     scores_dict = {split: {} for split in ['train', 'val']}

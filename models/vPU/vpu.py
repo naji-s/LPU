@@ -29,6 +29,36 @@ import LPU.external_libs.distPU.models.modelForCIFAR10
 import LPU.external_libs.distPU.models.modelForFMNIST
 import LPU.utils.auxiliary_models
 
+DEFAULT_CONFIG = {
+    "device": "cpu",
+    "dataset_name": "animal_no_animal",  # could also be fashionMNIST
+    "dataset_kind": "LPU",
+    "gpu": 9,
+    "val_iterations": 30,
+    "num_labeled": 3000,
+    "learning_rate": 0.0001,
+    "epochs": 50,
+    "mix_alpha": 0.3,
+    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
+    "lam": 0.3,
+    "ratios": {
+        # *** NOTE ***
+        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+        "test": 0.4,
+        "val": 0.1,
+        "holdout": 0.0,
+        "train": 0.5
+    },
+    "batch_size": {
+        "train": 64,
+        "test": 64,
+        "val": 64,
+        "holdout": 64
+    }
+}
+
+
 LOG = logging.getLogger(__name__)
 
 
@@ -90,9 +120,9 @@ def get_model_by_dataset(dataset_name):
     }
     return dataset_to_model.get(dataset_name)
 
-class VPU(LPU.models.lpu_model_base.LPUModelBase):
+class vPU(LPU.models.lpu_model_base.LPUModelBase):
     def __init__(self, config, **kwargs):
-        super(VPU, self).__init__()
+        super(vPU, self).__init__()
         self.config = config
         self.device = config.get('device')
         if self.config['dataset_kind'] not in ['LPU', 'MPE']:

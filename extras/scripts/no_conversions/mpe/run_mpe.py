@@ -136,7 +136,17 @@ def create_dataloaders_dict_mpe(config, drop_last=False):
         raise ValueError("Dataset needs to be either LPU or MPE")
 
 
-def train_model(config=None):
+def train_model(config=None, dataloaders_dict=None):
+
+    if config['set_seed']:
+        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
+        LPU.utils.utils_general.set_seed(seed)
+
+
+    if dataloaders_dict is None:
+        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+    
+
     if config is None:
         config = {}
 
@@ -155,7 +165,7 @@ def train_model(config=None):
 
     batch_size = config['batch_size']['train']
     estimate_alpha = config['estimate_alpha']
-    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
+
 
     y_vals = []
     y_probs = []

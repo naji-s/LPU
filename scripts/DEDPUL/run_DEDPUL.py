@@ -34,69 +34,25 @@ except ImportError:
 
 
 USE_DEFAULT_CONFIG = False
-DEFAULT_CONFIG = {
-    'learning_rate': .01,
-    'num_epochs': 10,
-    'device': 'cpu',
-    'dtype': LPU.constants.DTYPE,
-    'train_val_ratio': .1,
-    'evaluation_interval': 1,
-    'epoch_blocks': 1,
-    'nrep': 10,
-    'dedpul_type': 'dedpul',
-    'dataset_kind': 'LPU',
-    'dataset_name': 'animal_no_animal',
-    'cv': 5,
-    'estimate_diff_options':
-    {
-        'MT': True, 
-        'MT_coef': 0.25,
-        'decay_MT_coef': False,
-        'tune': False,
-        'bw_mix': 0.05, 
-        'bw_pos': 0.1,
-        'threshold': 'mid',
-        'n_gauss_mix': 20,
-        'n_gauss_pos': 10,
-        'bins_mix': 20,
-        'bins_pos': 20,
-        'k_neighbours': None,
-    },
-    'batch_size': 
-    {
-        'train': 64,
-        'test': 64,
-        'val': 64,
-        'holdout': 64,
-    },
-    'ratios': 
-    {
-        # *** NOTE ***
-        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
-        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.4,
-        'val': 0.05,
-        'holdout': .0,
-        'train': .55, 
-    },
-    'train_nn_options': 
-    { 
-        'loss_function': 'log',
-        'n_early_stop': 20,
-        'disp': False,
-        'beta': 0.,
-        'gamma': 1.,
-        'bayes_weight': 1e-5,   
-    }
-}
 
 
-def train_model(config=None):
+def train_model(config=None, dataloaders_dict=None):
+
     if config is None:
         config = {}
 
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+
+    if config['set_seed']:
+        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
+        LPU.utils.utils_general.set_seed(seed)
+
+
+    if dataloaders_dict is None:
+        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+    
+
     if 'random_state' in config and config['random_state'] is not None:
         random_state = config['random_state']
     else:

@@ -1,58 +1,16 @@
 import copy
-import logging
 
 import torch
 
 import LPU.constants
 import LPU.utils.dataset_utils
-import LPU.models.geometric.elkan.elkanGGPC
+import LPU.models.TiCE.TiCE
 import LPU.utils.plot_utils
 import LPU.utils.utils_general
 
 torch.set_default_dtype(LPU.constants.DTYPE)
 
 USE_DEFAULT_CONFIG = False
-DEFAULT_CONFIG = {
-    # for VGP:
-    "inducing_points_size": 32,
-    "learning_rate": 0.01,
-    "num_epochs": 10,
-    "stop_learning_lr": 1e-5,
-    "device": "cpu",
-    "epoch_block": 1,
-    "intrinsic_kernel_params": {
-        "normed": False,
-        "kernel_type": "laplacian",
-        "heat_temp": 0.01,
-        "noise_factor": 0.0,
-        "amplitude": 0.5,
-        "n_neighbor": 5,
-        "lengthscale": 0.3,
-        "neighbor_mode": "distance",
-        "power_factor": 1,
-        "invert_M_first": False,
-    },
-    "dataset_name": "animal_no_animal",  # fashionMNIST
-    "dataset_kind": "LPU",
-    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
-    'ratios': 
-    {
-        # *** NOTE ***
-        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
-        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.4,
-        'val': 0.05,
-        'holdout': .05,
-        'train': .50, 
-    },
-
-    "batch_size": {
-        "train": 64,
-        "test": 64,
-        "val": 64,
-        "holdout": 64
-    }
-}
 
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
@@ -66,19 +24,29 @@ except ImportError:
     LOG.warning("Ray is not available. Please install Ray to enable distributed training.")
     RAY_AVAILABLE = False
 
-def train_model(config=None):
+def train_model(config=None, dataloaders_dict=None):
     if config is None:
         config = {}
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
+    if config['set_seed']:
+        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
+        LPU.utils.utils_general.set_seed(seed)
+
+
+    inducing_points_size = config['inducing_points_size']
+    if dataloaders_dict is None:
+        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+    
+
+
 
     inducing_points_size = config['inducing_points_size']
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
     inducing_points_initial_vals = LPU.utils.dataset_utils.initialize_inducing_points(
         dataloaders_dict['train'], inducing_points_size)
-    elkan_model = LPU.models.geometric.elkan.elkanGGPC.ElkanGGPC(
+    tice_model = LPU.models.TiCE.TiCE.TiCE(
         config,
         inducing_points_initial_vals=inducing_points_initial_vals,
         training_size=len(dataloaders_dict['train'].dataset),
@@ -89,7 +57,7 @@ def train_model(config=None):
     num_epochs = config['num_epochs']
     epoch_block = config['epoch_block']
     optimizer = torch.optim.Adam([{
-        'params': elkan_model.parameters(),
+        'params': tice_model.parameters(),
         'lr': learning_rate
     }])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
@@ -99,32 +67,33 @@ def train_model(config=None):
     best_val_loss = float('inf')
     best_epoch = -1
     best_scores_dict = None
-    best_model_state = None
+    best_model_state = copy.deepcopy(tice_model.state_dict())
+
+    tice_model.set_C(dataloaders_dict['holdout'])
     for epoch in range(num_epochs):
-        elkan_model.set_C(dataloaders_dict['holdout'])
         scores_dict = {split: {} for split in dataloaders_dict.keys()}
-        scores_dict_item = elkan_model.train_one_epoch(optimizer=optimizer, dataloader=dataloaders_dict['train'],
-                                                       holdout_dataloader=dataloaders_dict['holdout'])
+        scores_dict_item = tice_model.train_one_epoch(optimizer=optimizer, dataloader=dataloaders_dict['train'],
+                                                     holdout_dataloader=dataloaders_dict['holdout'])
         scores_dict['train'].update(scores_dict_item)
         all_scores_dict['train']['epochs'].append(epoch)
 
-        scores_dict['val'] = elkan_model.validate(dataloaders_dict['val'], model=elkan_model.gp_model, loss_fn=elkan_model.loss_fn)
-        all_scores_dict['val']['epochs'].append(epoch)
-        # Update best validation loss and epoch
-        if scores_dict['val']['overall_loss'] < best_val_loss:
-            best_val_loss = scores_dict['val']['overall_loss']
-            best_epoch = epoch
-            best_scores_dict = copy.deepcopy(scores_dict)
-            best_model_state = copy.deepcopy(elkan_model.state_dict())
+        if epoch % epoch_block == 0:
+            scores_dict_item = tice_model.validate(dataloaders_dict['val'], loss_fn=tice_model.loss_fn, model=tice_model.gp_model)
+            scores_dict['val'].update(scores_dict_item)
+            all_scores_dict['val']['epochs'].append(epoch)
 
-        scheduler.step(scores_dict['val']['overall_loss'])
-            
+            scheduler.step(scores_dict['val']['overall_loss'])
+            # Update best validation loss and epoch
+            if scores_dict['val']['overall_loss'] < best_val_loss:
+                best_val_loss = scores_dict['val']['overall_loss']
+                best_epoch = epoch
+                best_scores_dict = copy.deepcopy(scores_dict)
+                best_model_state = copy.deepcopy(tice_model.state_dict())
         for split in dataloaders_dict.keys():
             for score_type, score_value in scores_dict[split].items():
                 if score_type not in all_scores_dict[split]:
                     all_scores_dict[split][score_type] = []
                 all_scores_dict[split][score_type].append(score_value)
-
 
         LOG.info(f"Epoch {epoch}: {scores_dict}")
         # Check current learning rate
@@ -134,15 +103,17 @@ def train_model(config=None):
         if current_lr <= config['stop_learning_lr']:
             print("Learning rate below threshold, stopping training.")
             break
+
         if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
                         ray.train.report({
                             'val_overall_loss': scores_dict['val']['overall_loss'],
                             'epoch': epoch,
                             'learning_rate': current_lr})        
 
+
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 
-    model = elkan_model
+    model = tice_model
     # Evaluate on the test set with the best model based on the validation set
     model.load_state_dict(best_model_state)
 
@@ -162,6 +133,7 @@ def train_model(config=None):
         ray.train.report(filtered_scores_dict)
     else:
         return all_scores_dict, best_epoch
+
 if __name__ == "__main__":
     results, best_epoch = train_model()
-    LPU.utils.plot_utils.plot_scores(results, best_epoch=best_epoch)
+    LPU.utils.plot_utils.plot_scores(results, best_epoch=best_epoch, loss_type='overall_loss')

@@ -21,7 +21,7 @@ import sklearn.model_selection
 import torch
 import LPU.constants
 import LPU.external_libs
-import LPU.models.geometric.elkan.elkanGGPC
+import LPU.models.geometric.Elkan.Elkan
 import LPU.models.lpu_model_base
 import LPU.external_libs.Self_PU.datasets
 import LPU.external_libs.Self_PU.functions
@@ -30,6 +30,68 @@ import LPU.external_libs.Self_PU.meta_models
 import LPU.external_libs.Self_PU.models
 import LPU.external_libs.Self_PU.utils
 import LPU.utils.utils_general
+
+DEFAULT_CONFIG = {
+    # "dataset_name": "animal_no_animal",
+    'ratios': 
+    {
+        # *** NOTE ***
+        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+        'test': 0.4,
+        'val': 0.05,
+        'holdout': .0,
+        'train': .55, 
+    },
+
+    "batch_size": {
+        "train": 64,
+        "test": 64,
+        "val": 64,
+        "holdout": 64
+    },
+    # "batch_size": {
+    #     "train": 8192,
+    #     "test": 8192,
+    #     "val": 8192,
+    #     "holdout": 8192
+    # },
+    "dataset_kind": "LPU",
+    "dataset_name": "animal_no_animal",
+    "dim": 4096,
+    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
+    "device": "cpu",
+    "lr": 0.01,
+    "momentum": 0.9,
+    "weight_decay": 0.005,
+    "modeldir": "LPU/scripts/selfPU/checkpoints/",
+    "epochs": 10,
+    "loss": "nnPU",
+    "gpu": None,
+    "workers": 0,
+    "weight": 1.0,
+    "self_paced": True,
+    "self_paced_start": 10,
+    "self_paced_stop": 50,
+    "self_paced_frequency": 10,
+    "self_paced_type": "A",
+    "increasing": True,
+    "replacement": True,
+    "mean_teacher": True,
+    "ema_start": 50,
+    "ema_decay": 0.999,
+    "consistency": 0.3,
+    "consistency_rampup": 400,
+    "top1": 0.4,
+    "top2": 0.6,
+    "soft_label": False,
+    "datapath": "./data",
+    "type": "mu",
+    "alpha": 0.1,
+    "gamma": 0.0625,
+    "num_p": 1000
+
+}
 
 torch.set_default_dtype(LPU.constants.DTYPE)
 

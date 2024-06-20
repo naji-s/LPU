@@ -37,7 +37,7 @@ LOG = LPU.utils.utils_general.configure_logger(__name__)
 class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
 
     class CustomLikelihood(gpytorch.likelihoods.Likelihood, metaclass=abc.ABCMeta):
-        def __init__(self, config, **kwargs):
+        def __init__(self, **kwargs):
             super().__init__()
 
         @abc.abstractmethod
@@ -56,27 +56,31 @@ class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
         duplicate_keys = set(config.keys()) & set(kwargs.keys())
         if duplicate_keys:
             raise ValueError(f"Duplicate arguments have been set through both keyword arguments and the config file: {duplicate_keys}")
-        
-        if inducing_points_initial_vals is None:
-            raise ValueError("inducing_points_initial_vals must be provided")
-        
+                
         if inducing_points_initial_vals is not None:
             self.inducing_points = torch.nn.Parameter(inducing_points_initial_vals)
             self.inducing_points_size = inducing_points_initial_vals.size(0)
         else:
+            input_dim = config.get('input_dim', None)
+            if input_dim is None:
+                raise ValueError("input_dim is not defined in the config. "
+                                 "Since inducing_points_initial_vals is not provided," 
+                                 "the model needs to know the input dimension."
+                                 "Please define input_dim in the config.")
+            
             self.inducing_points_size = kwargs.get('inducing_points_size', config.get('inducing_points_size', INDUCING_POINTS_SIZE))
             self.inducing_points = torch.nn.Parameter(torch.zeros(self.inducing_points_size))
 
         # Extract training_size first from kwargs and, if no there, then from config
         self.training_size = kwargs.get('training_size', config.get('training_size', None))
         
-        if self.training_size is None:
-            raise ValueError(
-                "training_size is not defined in the config. "
-                "gpytorch.mlls.PredictiveLogLikelihood (which is used in this implementation) "
-                "requires the number of training data points to be passed as an argument. "
-                "Please define training_size in the config."
-            )
+        # if self.training_size is None:
+        #     raise ValueError(
+        #         "training_size is not defined in the config. "
+        #         "gpytorch.mlls.PredictiveLogLikelihood (which is used in this implementation) "
+        #         "requires the number of training data points to be passed as an argument. "
+        #         "Please define training_size in the config."
+        #     )
 
         # creating the geometric VGP gp_model
         self.intrinsic_kernel_params = self._create_intrinsinc_kernel_params_from_config(
@@ -85,7 +89,7 @@ class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
         self.gp_model = LPU.models.geometric.GVGP.GeometricVGP(
             inducing_points=self.inducing_points,
             intrinsic_kernel_params=self.intrinsic_kernel_params).to(self.device)
-        self.likelihood = self.CustomLikelihood(config, **kwargs).to(DEVICE).to(dtype=LPU.constants.DTYPE)
+        self.likelihood = self.CustomLikelihood(**kwargs).to(DEVICE).to(dtype=LPU.constants.DTYPE)
         self.mll = gpytorch.mlls.PredictiveLogLikelihood(
             self.likelihood,
             model=self.gp_model,

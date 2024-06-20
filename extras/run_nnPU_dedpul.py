@@ -3,7 +3,7 @@ import sys
 
 sys.path.append('LPU/external_libs/DEDPUL')
 
-import LPU.models.geometric.kme.KMEGGPC
+import LPU.models.geometric.KME.KME
 LOG = logging.getLogger(__name__)
 
 # import torch.optim

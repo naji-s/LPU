@@ -32,7 +32,7 @@ import numpy as np
 import LPU.constants
 import LPU.utils.dataset_utils
 import LPU.datasets.LPUDataset
-import LPU.models.MPE.mpe_model
+import LPU.models.MPE.MPE
 import LPU.utils.plot_utils
 import LPU.utils.utils_general
 
@@ -49,67 +49,7 @@ except ImportError:
     LOG.warning("Ray is not available. Please install Ray to enable distributed training.")
     RAY_AVAILABLE = False
 
-DEFAULT_CONFIG = {
-    # "dataset_name": "animal_no_animal",
-    'ratios': 
-    {
-        # *** NOTE ***
-        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
-        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.4,
-        'val': 0.05,
-        'holdout': .0,
-        'train': .55, 
-    },
 
-    "batch_size": {
-        "train": 64,
-        "test": 64,
-        "val": 64,
-        "holdout": 64
-    },
-    # "batch_size": {
-    #     "train": 8192,
-    #     "test": 8192,
-    #     "val": 8192,
-    #     "holdout": 8192
-    # },
-    "dataset_kind": "LPU",
-    "dataset_name": "animal_no_animal",
-    "dim": 4096,
-    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
-    "device": "cpu",
-    "lr": 0.01,
-    "momentum": 0.9,
-    "weight_decay": 0.005,
-    "modeldir": "LPU/scripts/selfPU/checkpoints/",
-    "epochs": 10,
-    "loss": "nnPU",
-    "gpu": None,
-    "workers": 0,
-    "weight": 1.0,
-    "self_paced": True,
-    "self_paced_start": 10,
-    "self_paced_stop": 50,
-    "self_paced_frequency": 10,
-    "self_paced_type": "A",
-    "increasing": True,
-    "replacement": True,
-    "mean_teacher": True,
-    "ema_start": 50,
-    "ema_decay": 0.999,
-    "consistency": 0.3,
-    "consistency_rampup": 400,
-    "top1": 0.4,
-    "top2": 0.6,
-    "soft_label": False,
-    "datapath": "./data",
-    "type": "mu",
-    "alpha": 0.1,
-    "gamma": 0.0625,
-    "num_p": 1000
-
-}
 
 
 
@@ -168,14 +108,24 @@ def make_transformations(dataset_name):
 
     return transformations[dataset_name]
 
-def train_model(config=None):
-    
+def train_model(config=None, dataloaders_dict=None):
     if config is None:
         config = {}
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
+
+    if config['set_seed']:
+        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
+        LPU.utils.utils_general.set_seed(seed)
+
+
+    if dataloaders_dict is None:
+        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+    
+
+    
+
     # torch.manual_seed(config['seed'])
     # if config['seed'] is not None:
     #     random.seed(config['seed'])

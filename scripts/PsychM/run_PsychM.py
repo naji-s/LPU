@@ -4,48 +4,14 @@ import json
 import torch
 import LPU.constants
 import LPU.datasets.dataset_utils
-import LPU.models.geometric.psychm.psychmGGPC
+import LPU.models.geometric.PsychM.PsychM
 import LPU.utils.plot_utils
 import LPU.utils.utils_general
 
 torch.set_default_dtype(LPU.constants.DTYPE)
 
 USE_DEFAULT_CONFIG = False
-DEFAULT_CONFIG = {
-    "inducing_points_size": 32,
-    "learning_rate": 0.01,
-    "num_epochs": 10,
-    "stop_learning_lr": 1e-5,
-    "device": "cpu",
-    "epoch_block": 1,
-    "intrinsic_kernel_params": {
-        "normed": False,
-        "kernel_type": "laplacian",
-        "heat_temp": 0.01,
-        "noise_factor": 0.0,
-        "amplitude": 0.5,
-        "n_neighbor": 5,
-        "lengthscale": 0.3,
-        "neighbor_mode": "distance",
-        "power_factor": 1,
-        "invert_M_first": False,
-    },
-    "dataset_name": "animal_no_animal",
-    "dataset_kind": "LPU",
-    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
-    "ratios": {
-        "test": 0.4,
-        "val": 0.05,
-        "holdout": 0.0,
-        "train": 0.55
-    },
-    "batch_size": {
-        "train": 64,
-        "test": 64,
-        "val": 64,
-        "holdout": 64
-    }
-}
+
 
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
@@ -59,19 +25,32 @@ except ImportError:
     LOG.warning("Ray is not available. Please install Ray to enable distributed training.")
     RAY_AVAILABLE = False
 
-def train_model(config=None):
+def train_model(config=None, dataloaders_dict=None):
+
     if config is None:
         config = {}
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
+    if config['set_seed']:
+        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
+        LPU.utils.utils_general.set_seed(seed)
+
+
+    inducing_points_size = config['inducing_points_size']
+    if dataloaders_dict is None:
+        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+    inducing_points_initial_vals = LPU.utils.dataset_utils.initialize_inducing_points(
+    dataloaders_dict['train'], inducing_points_size)        
+
+
+
 
     inducing_points_size = config['inducing_points_size']
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
     inducing_points_initial_vals = LPU.utils.dataset_utils.initialize_inducing_points(
         dataloaders_dict['train'], inducing_points_size)
-    psychmGVGP_model = LPU.models.geometric.psychm.psychmGGPC.PsychMGP(
+    psychmGVGP_model = LPU.models.geometric.PsychM.PsychM.PsychMGP(
         config,
         inducing_points_initial_vals=inducing_points_initial_vals,
         training_size=len(dataloaders_dict['train'].dataset),

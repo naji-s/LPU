@@ -16,9 +16,42 @@ import scipy.special
 
 import LPU.constants
 import LPU.external_libs
-import LPU.models.geometric.elkan.elkanGGPC
+import LPU.models.geometric.Elkan.Elkan
 import LPU.models.lpu_model_base
 import LPU.external_libs.nnPUSB.nnPU_loss
+
+DEFAULT_CONFIG = {
+    "device": "cpu",
+    "preset": "figure1",
+    "dataset_name": "animal_no_animal",
+    "numpy_dtype": "float64",
+    "epoch": 100,
+    "beta": 0.0,
+    "gamma": 1.0,
+    "learning_rate": 0.001,
+    "loss": "sigmoid",
+    "model": "mlp",
+    "out": "LPU/scripts/nnPU/checkpoints",
+    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
+    "dataset_kind": "LPU",
+    "batch_size": {
+        "train": 64,
+        "test": None,
+        "val": None,
+        "holdout": None
+    },
+    'ratios': 
+    {
+        # *** NOTE ***
+        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+        'test': 0.4,
+        'val': 0.05,
+        'holdout': .0,
+        'train': .55, 
+    },
+
+}
 
 
 LOG = logging.getLogger(__name__)

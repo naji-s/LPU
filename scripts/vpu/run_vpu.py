@@ -38,35 +38,6 @@ import LPU.utils.auxiliary_models
 import LPU.utils.plot_utils
 import LPU.utils.utils_general
 
-DEFAULT_CONFIG = {
-    "device": "cpu",
-    "dataset_name": "animal_no_animal",  # could also be fashionMNIST
-    "dataset_kind": "LPU",
-    "gpu": 9,
-    "val_iterations": 30,
-    "num_labeled": 3000,
-    "learning_rate": 0.0001,
-    "epochs": 50,
-    "mix_alpha": 0.3,
-    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
-    "lam": 0.3,
-    "random_seed": 0,
-    "ratios": {
-        # *** NOTE ***
-        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
-        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        "test": 0.4,
-        "val": 0.1,
-        "holdout": 0.0,
-        "train": 0.5
-    },
-    "batch_size": {
-        "train": 64,
-        "test": 64,
-        "val": 64,
-        "holdout": 64
-    }
-}
 
 
 def get_loaders_by_dataset_name(dataset_name):
@@ -105,13 +76,20 @@ except ImportError:
     LOG.warning("Ray is not available. Please install Ray to enable distributed training.")
     RAY_AVAILABLE = False
 
-def train_model(config=None):
+def train_model(config=None, dataloaders_dict=None):
     if config is None:
         config = {}
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
+    if config['set_seed']:
+        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
+        LPU.utils.utils_general.set_seed(seed)
+
+    if dataloaders_dict is None:
+        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+    
+
 
     positive_label_list = get_positive_labels(config['dataset_name'])
 
@@ -137,7 +115,7 @@ def train_model(config=None):
     ###########################################################################
     lowest_val_var = math.inf  # lowest variational loss on validation set
     highest_test_acc = -1 # highest test accuracy on test set
-    vpu_model = LPU.models.vPU.vpu.VPU(config=config, input_dim=dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
+    vpu_model = LPU.models.vPU.vpu.vPU(config=config, input_dim=dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
 
     l_mean = len(dataloaders_dict['train']['PDataset'].dataset) / (len(dataloaders_dict['train']['UDataset'].dataset) + len(dataloaders_dict['train']['PDataset'].dataset))
     lr_phi = config['learning_rate']

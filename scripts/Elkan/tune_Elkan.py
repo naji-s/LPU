@@ -8,11 +8,11 @@ import ray.tune
 import ray.tune.schedulers
 
 import LPU.scripts
-import LPU.scripts.elkan.run_ElkanGGPC
+import LPU.scripts.elkan.run_Elkan
 import LPU.utils.utils_general
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
-MODEL_NAME = 'ElkanGGPC'
+MODEL_NAME = 'Elkan'
 
 def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
     if random_state is None:
@@ -50,7 +50,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
 
     execution_start_time = time.time()
     result = ray.tune.run(
-        LPU.scripts.elkan.run_ElkanGGPC.train_model,
+        LPU.scripts.elkan.run_Elkan.train_model,
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,

@@ -18,7 +18,7 @@ import numpy as np
 import LPU.constants
 import LPU.utils.dataset_utils
 import LPU.datasets.LPUDataset
-import LPU.models.MPE.mpe_model
+import LPU.models.MPE.MPE
 import LPU.utils.plot_utils
 import LPU.utils.utils_general    
 
@@ -34,107 +34,28 @@ except ImportError:
     LOG.warning("Ray is not available. Please install Ray to enable distributed training.")
     RAY_AVAILABLE = False
 
-DEFAULT_CONFIG = {
-    "dataset": "animal_no_animal",
-    "lr": 0.01,
-    "wd": 0.0005,
-    "momentum": 0.9,
-    "data_type": None,
-    "train_method": "TEDn",
-    "net_type": "LeNet",
-    "sigmoid_loss": True,
-    "estimate_alpha": True,
-    "warm_start": True,
-    "warm_start_epochs": 100,
-    "epochs": 100,
-    "alpha": 0.5,
-    "beta": 0.5,
-    "log_dir": "logging_accuracy",
-    "data_dir": "data",
-    "optimizer": "Adam",
-    "alpha_estimate": 0.0,
-    "show_bar": False,
-    "use_alpha": False,
-    "device": "cpu",
-    "dataset_kind": "LPU",
-    'ratios': 
-    {
-        # *** NOTE ***
-        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
-        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.4,
-        'val': 0.05,
-        'holdout': .0,
-        'train': .55, 
-    },
-    "batch_size": {
-        "train": 64,
-        "test": 64,
-        "val": 64,
-        "holdout": 64
-    },
-    "data_generating_process": "SB"  # either of CC (case-control) or SB (selection-bias)
-}
-
-def create_dataloaders_dict_mpe(config, drop_last=False):
-    # dataloders_dict = {}
-    # samplers_dict = {}
-    mpe_dataset_dict = {}
-    mpe_dataloaders_dict = {}
-    mpe_indices_dict = {}
-    ratios_dict = config['ratios']
-    data_generating_process = config['data_generating_process']
-    data_type = LPU.constants.DTYPE
-    if config['dataset_kind'] == 'LPU':
-        lpu_dataset = LPU.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')    
-        l_y_cat_transformed = lpu_dataset.l.cpu().numpy() * 2 + lpu_dataset.y.cpu().numpy()
-        split_indices_dict = LPU.utils.dataset_utils.index_group_split(np.arange(len(l_y_cat_transformed)), ratios_dict=ratios_dict, random_state=LPU.constants.RANDOM_STATE, strat_arr=l_y_cat_transformed)
-        for split in split_indices_dict.keys():
-            # *** DO NOT DELETE *** for the normal case where we have a LPU dataset
-            # samplers_dict[split], dataloders_dict[split] = LPU.utils.dataset_utils.make_data_loader(lpu_dataset, batch_size=config['batch_size'][split],)
-            mpe_dataset_dict[split], mpe_indices_dict[split] = LPU.utils.dataset_utils.LPUD_to_MPED(lpu_dataset=lpu_dataset, indices=split_indices_dict[split], data_generating_process=data_generating_process)
-            mpe_dataloaders_dict[split] = {}
-            for dataset_type in mpe_dataset_dict[split].keys():
-                mpe_dataloaders_dict[split][dataset_type] = torch.utils.data.DataLoader(mpe_dataset_dict[split][dataset_type], batch_size=config['batch_size'][split], drop_last=drop_last, shuffle=True)
-    elif config['dataset_kind'] == 'MPE':
-        p_trainloader, u_trainloader, p_validloader, u_validloader, net, X, Y, p_validdata, u_validdata, u_traindata, p_traindata = \
-                LPU.external_libs.PU_learning.helper.get_dataset(config['data_dir'], config['data_type'], config['net_type'], config['device'], config['alpha'], config['beta'], config['batch_size'])
 
 
-        mpe_dataloaders_dict['train']= {}
-        mpe_dataloaders_dict['test'] ={}
-        mpe_dataloaders_dict['val'] = {}
-        mpe_dataloaders_dict['holdout'] = {}
-
-        mpe_dataloaders_dict['train']['PDataset'] = p_trainloader
-        mpe_dataloaders_dict['train']['UDataset'] = u_trainloader
-
-        mpe_dataloaders_dict['test']['PDataset'] = p_validloader
-        mpe_dataloaders_dict['test']['UDataset'] = u_validloader
-
-        mpe_dataloaders_dict['holdout']['PDataset'] = p_validloader
-        mpe_dataloaders_dict['holdout']['UDataset'] = u_validloader
-
-
-        mpe_dataloaders_dict['val']['PDataset'] = p_validloader
-        mpe_dataloaders_dict['val']['UDataset'] = u_validloader
-    else:
-        raise ValueError("Dataset needs to be either LPU or MPE")
-    return mpe_dataloaders_dict
-
-
-def train_model(config=None):
+def train_model(config=None, dataloaders_dict=None):
 
     if config is None:
         config = {}
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    LPU.utils.utils_general.set_seed(LPU.constants.RANDOM_STATE)
+    if config['set_seed']:
+        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
+        LPU.utils.utils_general.set_seed(seed)
+
+
+    if dataloaders_dict is None:
+        dataloaders_dict = create_dataloaders_dict_mpe(config)
+    
+
 
     criterion = torch.nn.CrossEntropyLoss()
 
-    mpe_model = LPU.models.MPE.mpe_model.MPE(config)
+    mpe_model = LPU.models.MPE.MPE.MPE(config)
 
     mpe_dataloaders_dict = create_dataloaders_dict_mpe(config)
 

@@ -21,7 +21,7 @@
 # import torch
 # import LPU.constants
 # import LPU.external_libs
-# import LPU.models.geometric.elkanGGPC
+# import LPU.models.geometric.Elkan
 # import LPU.models.lpu_model_base
 # import LPU.external_libs.Self_PU.datasets
 # import LPU.external_libs.Self_PU.train

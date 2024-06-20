@@ -13,6 +13,64 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 
+DEFAULT_CONFIG = {
+    "inducing_points_size": 32,
+    "learning_rate": 0.001,
+    "num_epochs": 5,
+    "device": "cpu",
+    "epoch_block": 1,
+    "dataset_name": "animal_no_animal",  # could also be fashionMNIST
+    "dataset_kind": "LPU",
+    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
+
+    # setting up parameters for the classification model of sar_pu
+    "SAR_PU_classification_model": 'logistic',
+    "svm_params": 
+        {
+        'tol': 1e-4,
+        'C': 1.0,
+        'kernel': 'rbf', 
+        'degree': 3, 
+        'gamma': 'scale',
+        'class_weight': None,
+        'random_state': None,  
+         'max_iter':-1, 
+         'cache_size':200,
+         'decision_function_shape': 'ovr', 
+         'verbose': 0    
+        },
+    'logistic_params':
+        {'penalty': 'l2', 
+         'dual': False, 
+         'tol':1e-4, 
+         'C': 1.0,
+         'fit_intercept': True, 
+         'intercept_scaling': 1, 
+         'class_weight': None,
+         'random_state': None, 
+         'solver': 'liblinear', 
+         'max_iter': 100,
+         'multi_class': 'ovr', 
+         'verbose': 0, 
+         'warm_start': False, 
+         'n_jobs': 1
+        },
+    "ratios": {
+        # *** NOTE ***
+        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+        "test": 0.4,
+        "val": 0.,
+        "holdout": 0.0,
+        "train": 0.6
+    },
+    "batch_size": {
+        "train": None,
+        "test": None,
+        "val": None,
+        "holdout": None
+    }
+}
 
 class BasePU:
     @staticmethod

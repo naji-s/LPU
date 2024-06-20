@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import os
 DTYPE = torch.float64
-ROOT_PATH = os.path.join(os.getcwd())#, 'psych_model')
+ROOT_PATH = os.path.join(os.getcwd(), 'psych_model')
 EPSILON = 1e-8
 BATCH_SIZE = 64
 NUMPY_DTYPE = np.float64

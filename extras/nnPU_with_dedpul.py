@@ -21,7 +21,7 @@ import LPU.external_libs.DEDPUL.algorithms
 import LPU.external_libs.DEDPUL.NN_functions
 import LPU.external_libs.DEDPUL.utils
 import LPU.models.dedpul.dedpul
-import LPU.models.geometric.elkan.elkanGGPC
+import LPU.models.geometric.Elkan.Elkan
 import LPU.models.lpu_model_base
 
 LOG = logging.getLogger(__name__)
