@@ -1,6 +1,7 @@
 import logging
 import unittest.mock
-
+import tempfile
+import os
 
 import sys
 sys.path.append('LPU/external_libs/DEDPUL')
@@ -14,7 +15,7 @@ import LPU.utils.utils_general
 import LPU.constants
 import LPU.datasets.LPUDataset
 import LPU.utils.dataset_utils
-import LPU.models.dedpul.dedpul
+import LPU.models.DEDPUL.DEDPUL
 import LPU.utils.plot_utils
 import LPU.utils.utils_general
 
@@ -36,13 +37,13 @@ except ImportError:
 USE_DEFAULT_CONFIG = False
 
 
-def train_model(config=None, dataloaders_dict=None):
+def train_model(config=None, dataloaders_dict=None, with_ray=False):
 
     if config is None:
         config = {}
 
     # Load the base configuration
-    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(LPU.models.DEDPUL.DEDPUL.DEFAULT_CONFIG, config)
 
     if config['set_seed']:
         seed = config.get('random_state', LPU.constants.RANDOM_STATE)
@@ -64,7 +65,7 @@ def train_model(config=None, dataloaders_dict=None):
     # Initialize training components using the combined configuration
     torch.set_default_dtype(LPU.constants.DTYPE)
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
-    dedpul_model = LPU.models.dedpul.dedpul.DEDPUL(config)
+    dedpul_model = LPU.models.DEDPUL.DEDPUL.DEDPUL(config)
     
     # Train and report metrics
     scores_dict = dedpul_model.train(
@@ -77,15 +78,32 @@ def train_model(config=None, dataloaders_dict=None):
     flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
-        if 'train' in key or 'val' in key or 'test' in key:
+        if 'train' in key or 'val' in key:
             if 'epochs' not in key:
                 filtered_scores_dict[key] = value
-    print("Reporting Metrics: ", filtered_scores_dict)  # Debug print to check keys
 
-    # Report metrics if executed under Ray Tune
+    # Add checkpointing code
     if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
-        ray.train.report(filtered_scores_dict)
+        with tempfile.TemporaryDirectory() as tempdir:
+            torch.save(
+                {"model_state": dedpul_model.state_dict(),
+                 "config": config,},
+                os.path.join(tempdir, "checkpoint.pt"),
+            )
+            ray.train.report(metrics=filtered_scores_dict, checkpoint=ray.train.Checkpoint.from_directory(tempdir))
+    
+    # Report metrics if executed under Ray Tune
+    if with_ray:
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+            ray.train.report(filtered_scores_dict)
+        else:
+            raise ValueError("Ray is not connected or initialized. Please connect to Ray to use Ray functionalities.")
     else:
+        for key, value in flattened_scores.items():
+            if 'test' in key:
+                if 'epochs' not in key:
+                    filtered_scores_dict[key] = value
+        LOG.info(f"Final test scores: {scores_dict['test']}")
         return scores_dict
 
 if __name__ == "__main__":
