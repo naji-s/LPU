@@ -97,5 +97,6 @@ class Elkan(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
         for holdout_X, holdout_l, _, _ in holdout_dataloader:
             C_vals.append(self.predict_proba(holdout_X[holdout_l==1]).detach().cpu().numpy())
         C_vals = np.hstack(C_vals)
-        self.C = np.mean(C_vals, axis=0)
-    
+        C_value = np.mean(C_vals, axis=0)
+        with torch.no_grad():
+            self.C.fill_(torch.tensor(C_value).to(LPU.constants.DTYPE))
