@@ -1,6 +1,7 @@
 
 import copy
-
+import tempfile
+import os
 
 import sys
 sys.path.append('LPU/external_libs/PU_learning')
@@ -59,7 +60,7 @@ def train_model(config=None, dataloaders_dict=None):
 
     mpe_dataloaders_dict = LPU.models.MPE.MPE.create_dataloaders_dict_mpe(config)
 
-    mpe_model.initialize_model(mpe_dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
+    # mpe_model.initialize_model(mpe_dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
     train_unlabeled_size = len(mpe_dataloaders_dict['train']['UDataset'].dataset.data)
  
     if config['optimizer'] == "SGD":
@@ -130,11 +131,22 @@ def train_model(config=None, dataloaders_dict=None):
             mpe_model.set_C(l_mean=len(mpe_dataloaders_dict['holdout']['PDataset']) / (len(mpe_dataloaders_dict['holdout']['UDataset']) + len(mpe_dataloaders_dict['holdout']['PDataset'])))
             
         LOG.info(f"Train Epoch {epoch}: {scores_dict}")
+       # Add checkpointing code
         if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
-                        ray.train.report({
-                            'val_overall_loss': scores_dict['val']['overall_loss'],
-                            'epoch': epoch,})        
-
+            with tempfile.TemporaryDirectory() as tempdir:
+                torch.save(
+                    {"epoch": epoch, 
+                     "model_state": mpe_model.state_dict(),
+                     "config": config,},
+                    os.path.join(tempdir, "checkpoint.pt"),
+                )
+                ray.train.report(metrics={
+                        'val_overall_loss': scores_dict['val']['overall_loss'],
+                        'val_y_auc': scores_dict['val']['y_auc'],
+                        'val_y_accuracy': scores_dict['val']['y_accuracy'],
+                        'val_y_APS': scores_dict['val']['y_APS'],
+                        'epoch': epoch,}, checkpoint=ray.train.Checkpoint.from_directory(tempdir))
+                
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 
     model = mpe_model

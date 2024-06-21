@@ -11,6 +11,8 @@ import LPU.utils.auxiliary_models
 
 DEFAULT_CONFIG = {
     "dataset": "animal_no_animal",
+    "input_dim": 4096,
+    "set_seed": True,
     "lr": 0.01,
     "wd": 0.0005,
     "momentum": 0.9,
@@ -39,8 +41,8 @@ DEFAULT_CONFIG = {
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
         'test': 0.4,
         'val': 0.05,
-        'holdout': .0,
-        'train': .55, 
+        'holdout': .05,
+        'train': .5, 
     },
     "batch_size": {
         "train": 64,
@@ -111,6 +113,10 @@ class MPE(LPU.models.lpu_model_base.LPUModelBase):
             self.alpha_estimate = self.true_alpha
         else:
             self.alpha_estimate = config['alpha_estimate']
+        self.input_dim = config.get('input_dim', None)
+        if self.input_dim is not None:
+            self.initialize_model(self.input_dim)
+
     def initialize_model(self, dim):
         self.net = LPU.utils.auxiliary_models.MultiLayerPerceptron(input_dim=dim, output_dim=2).to(self.device).to(LPU.constants.DTYPE)
         if self.config['device'].startswith('cuda'):
@@ -324,8 +330,8 @@ class MPE(LPU.models.lpu_model_base.LPUModelBase):
                     % (total_loss/(batch_idx+1), 100.*correct/total_size, correct, total_size))
         all_y_outputs = torch.nn.functional.softmax(all_y_outputs, dim=-1)[:,1].detach().cpu().numpy().squeeze()
         # all_l_outputs = 1 - all_y_outputs
-        all_l_outputs = all_y_outputs * self.C
-        all_l_ests = all_l_outputs > 0.5 * self.C
+        all_l_outputs = all_y_outputs * self.C.detach().cpu().numpy()
+        all_l_ests = all_l_outputs > 0.5 * self.C.detach().cpu().numpy()
         all_y_ests = all_y_outputs > 0.5
         all_scores = self._calculate_validation_metrics(y_probs=all_y_outputs, y_vals=all_ys, l_probs=all_l_outputs, l_vals=all_ls, l_ests=all_l_ests, y_ests=all_y_ests)
         all_scores['overall_loss'] = total_loss / (batch_idx + 1)
@@ -460,8 +466,8 @@ class MPE(LPU.models.lpu_model_base.LPUModelBase):
         total_p_loss /= len(p_trainloader)
         total_u_loss /= len(u_trainloader)
         all_y_outputs = torch.nn.functional.softmax(all_y_outputs, dim=-1)[:,1].detach().cpu().numpy().squeeze()
-        all_l_outputs = all_y_outputs * self.C
-        all_l_ests = all_l_outputs > 0.5 * self.C
+        all_l_outputs = all_y_outputs * self.C.detach().cpu().numpy()
+        all_l_ests = all_l_outputs > 0.5 * self.C.detach().cpu().numpy()
         all_y_ests = all_y_outputs > 0.5
         all_scores = self._calculate_validation_metrics(y_probs=all_y_outputs, y_vals=all_ys, l_probs=all_l_outputs, l_vals=all_ls, l_ests=all_l_ests, y_ests=all_y_ests)
         all_scores['overall_loss'] = total_loss
@@ -540,7 +546,7 @@ class MPE(LPU.models.lpu_model_base.LPUModelBase):
                 outputs_probs = 1 - outputs_probs.detach().cpu().numpy()
                 l_probs = self.predict_proba(X)
                 l_probs = l_probs
-                l_ests = self.predict(X, threshold=0.5 * self.C)
+                l_ests = self.predict(X, threshold=0.5 * self.C.detach().cpu().numpy())
                 l_vals = np.zeros_like(y)
                 y_vals.append(y)
                 y_ests.append(predicted)
@@ -560,18 +566,6 @@ class MPE(LPU.models.lpu_model_base.LPUModelBase):
         validation_results['overall_loss'] = total_loss/(batch_idx+1)
         return validation_results
 
-    # def calculate_probs_and_scores(self, X_batch, l_batch, y_batch):
-    #     y_prob = self.predict_prob_y_given_X(X_batch)
-    #     l_prob = y_prob * self.C
-    #     l_est = l_prob > 0.5
-    #     y_est = y_prob > 0.5
-    #     scores = self._calculate_validation_metrics(
-    #         y_prob, y_batch, l_prob, l_batch.cpu().numpy(),
-    #         l_ests=l_est, y_ests=y_est.cpu().numpy()
-    #     )
-    #     return scores
-
-
     def predict_prob_y_given_X(self, X=None, f_x=None):
         if f_x is None:
             if type(X) == np.ndarray:
@@ -583,9 +577,10 @@ class MPE(LPU.models.lpu_model_base.LPUModelBase):
     
         
     def set_C(self, l_mean):
-        self.C = l_mean * self.alpha_estimate
+        with torch.no_grad():
+            self.C.fill_(l_mean * self.alpha_estimate)
     
     def predict_prob_l_given_y_X(self, X=None, f_x=None):
-        return self.C
+        return self.C.detach().cpu().numpy()
         
 
