@@ -41,7 +41,7 @@ def train_model(config=None, dataloaders_dict=None):
     if config is None:
         config = {}
     # Load the base configuration
-    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(LPU.models.MPE.MPE.DEFAULT_CONFIG, config)
 
     if config['set_seed']:
         seed = config.get('random_state', LPU.constants.RANDOM_STATE)
@@ -49,7 +49,7 @@ def train_model(config=None, dataloaders_dict=None):
 
 
     if dataloaders_dict is None:
-        dataloaders_dict = create_dataloaders_dict_mpe(config)
+        dataloaders_dict = LPU.models.MPE.MPE.create_dataloaders_dict_mpe(config)
     
 
 
@@ -57,7 +57,7 @@ def train_model(config=None, dataloaders_dict=None):
 
     mpe_model = LPU.models.MPE.MPE.MPE(config)
 
-    mpe_dataloaders_dict = create_dataloaders_dict_mpe(config)
+    mpe_dataloaders_dict = LPU.models.MPE.MPE.create_dataloaders_dict_mpe(config)
 
     mpe_model.initialize_model(mpe_dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
     train_unlabeled_size = len(mpe_dataloaders_dict['train']['UDataset'].dataset.data)
