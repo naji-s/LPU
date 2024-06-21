@@ -11,7 +11,7 @@ import ray.train
 import ray.tune
 import ray.tune.schedulers
 
-import LPU.scripts.mpe.run_mpe
+import LPU.scripts.MPE.run_MPE
 import LPU.utils.utils_general
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
