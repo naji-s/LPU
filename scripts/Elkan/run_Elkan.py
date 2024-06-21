@@ -64,8 +64,8 @@ def train_model(config=None, dataloaders_dict=None):
     best_epoch = -1
     best_scores_dict = None
     best_model_state = None
+    elkan_model.set_C(dataloaders_dict['holdout'])
     for epoch in range(num_epochs):
-        elkan_model.set_C(dataloaders_dict['holdout'])
         scores_dict = {split: {} for split in dataloaders_dict.keys()}
         scores_dict_item = elkan_model.train_one_epoch(optimizer=optimizer, dataloader=dataloaders_dict['train'],
                                                        holdout_dataloader=dataloaders_dict['holdout'])
@@ -90,6 +90,7 @@ def train_model(config=None, dataloaders_dict=None):
                 all_scores_dict[split][score_type].append(score_value)
 
 
+        elkan_model.set_C(dataloaders_dict['holdout'])
         LOG.info(f"Epoch {epoch}: {scores_dict}")
         # Check current learning rate
         current_lr = optimizer.param_groups[0]['lr']
