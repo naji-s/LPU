@@ -498,25 +498,6 @@ class DEDPUL(LPU.models.lpu_model_base.LPUModelBase):
         self.bw_pos = self.config.get('bw_pos', 0.1)
         self.dedepul_type = self.config['dedpul_type']
 
-
-    # def set_C(self, holdout_dataloader):
-    #     try:
-    #         assert (holdout_dataloader.batch_size == len(holdout_dataloader.dataset)), "There should be only one batch in the dataloader."
-    #     except AssertionError as e:
-    #         LOG.error(f"There should be only one batch in the dataloader, but {holdout_dataloader.batch_size} is smaller than {len(holdout_dataloader.dataset)}.")
-    #         raise e
-    #     X, l, _, _ = next(iter(holdout_dataloader))
-    #     preds = self.discriminator(X).detach().cpu().numpy().reshape((-1, 1))
-    #     l = l.reshape((-1, 1))
-    #     X = X.numpy()
-    #     X = pd.DataFrame(X)
-    #     self.threshold = self.config.get('threshold', (preds[l==1].mean()+preds[l==0].mean())/2)
-    #     diff = LPU.external_libs.DEDPUL.algorithms.estimate_diff(preds, 1-l, bw_mix=self.bw_mix, bw_pos=self.bw_pos, kde_mode=self.kde_mode, threshold=self.threshold,
-    #                  MT=False, MT_coef=self.MT_coef, tune=False, decay_MT_coef=False, n_gauss_mix=20, n_gauss_pos=10,bins_mix=20, bins_pos=20, k_neighbours=None)
-    #     self.alpha, _ =  LPU.external_libs.DEDPUL.algorithms.estimate_poster_em(diff, preds, self.dedepul_type, alpha_as_mean_poster=True)
-    #     self.holdout_l_mean = l.mean()
-    #     self.C = self.holdout_l_mean * (1-self.alpha)
-
     def train(self, train_dataloader, val_dataloader, test_dataloader, train_nn_options):
         all_X_train = []
         all_l_train = []
