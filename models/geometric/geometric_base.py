@@ -48,8 +48,8 @@ class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
         def update_input_data(self, X):
             raise NotImplementedError("update_input_data method must be implemented in the subclass")
         
-    def __init__(self, config, inducing_points_initial_vals=None, *args, **kwargs):
-        super().__init__()
+    def __init__(self, config=None, inducing_points_initial_vals=None, **kwargs):
+        super().__init__(config=config, **kwargs)
         self.config = config
         self.device = config.get('device', DEVICE)
         self.cholesky_max_tries = config.get('cholesky_max_tries', 10)
@@ -58,8 +58,10 @@ class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
             raise ValueError(f"Duplicate arguments have been set through both keyword arguments and the config file: {duplicate_keys}")
                 
         if inducing_points_initial_vals is not None:
+            print("WOAH")
             self.inducing_points = torch.nn.Parameter(inducing_points_initial_vals)
             self.inducing_points_size = inducing_points_initial_vals.size(0)
+            self.inducing_points_initial_vals = inducing_points_initial_vals
         else:
             input_dim = config.get('input_dim', None)
             if input_dim is None:

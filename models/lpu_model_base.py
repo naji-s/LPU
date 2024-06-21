@@ -6,11 +6,18 @@ import torch
 import LPU.constants
 import LPU.datasets.animal_no_animal.animal_no_animal_utils
 import LPU.utils.dataset_utils
-import LPU.utils.dataset_utils  
+import LPU.utils.utils_general
+
+LOG = LPU.utils.utils_general.configure_logger(__name__)
 
 class LPUModelBase(torch.nn.Module):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, config=None, *args, **kwargs):
+        super().__init__()
+        if config is None:
+            config = {}
+            LOG.warning("No configuration provided. Using default configuration.")
+            
+        self.C = torch.nn.Parameter(torch.tensor(config.get('C', 1.0), dtype=LPU.constants.DTYPE), requires_grad=False)
 
     def _separate_labels(self, y):
         """
