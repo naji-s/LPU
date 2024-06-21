@@ -22,31 +22,31 @@ LOG = LPU.utils.utils_general.configure_logger(__name__)
 MODEL_NAME = 'KME'
 
 
-def reload_and_validate_model(results_dir, dataloaders_dict):
-    # Load the best trial report
-    best_trial_report_path = os.path.join(results_dir, MODEL_NAME)
-    best_trial_report_file = [os.path.join(best_trial_report_path, f, 'best_trial_results.json') for f in os.listdir(best_trial_report_path)][0]
+# def reload_and_validate_model(results_dir, dataloaders_dict):
+#     # Load the best trial report
+#     best_trial_report_path = os.path.join(results_dir, MODEL_NAME)
+#     best_trial_report_file = [os.path.join(best_trial_report_path, f, 'best_trial_results.json') for f in os.listdir(best_trial_report_path)][0]
 
-    with open(best_trial_report_file, "r") as json_file:
-        best_trial_report = json.load(json_file)
+#     with open(best_trial_report_file, "r") as json_file:
+#         best_trial_report = json.load(json_file)
 
-    best_trial_config = best_trial_report["Best trial config"]
+#     best_trial_config = best_trial_report["Best trial config"]
 
-    # Load the checkpoint
-    checkpoint_dir = os.path.join(results_dir, best_trial_config["checkpoint_path"], "checkpoint.pt")
-    checkpoint = torch.load(checkpoint_dir)
+#     # Load the checkpoint
+#     checkpoint_dir = os.path.join(results_dir, best_trial_config["checkpoint_path"], "checkpoint.pt")
+#     checkpoint = torch.load(checkpoint_dir)
 
-    # Recreate the model
-    model = LPU.models.geometric.KME.KME.KME()
-    model.load_state_dict(checkpoint["model_state"])
-    model.eval()  # Set the model to evaluation mode
+#     # Recreate the model
+#     model = LPU.models.geometric.KME.KME.KME()
+#     model.load_state_dict(checkpoint["model_state"])
+#     model.eval()  # Set the model to evaluation mode
 
-    # Validate the model
-    test_dataloader = dataloaders_dict['test']
-    test_results = LPU.scripts.KME.run_KME.validate_model(model, test_dataloader)
+#     # Validate the model
+#     test_dataloader = dataloaders_dict['test']
+#     test_results = LPU.scripts.KME.run_KME.validate_model(model, test_dataloader)
 
-    print(json.dumps(test_results, indent=4))
-    return test_results
+#     print(json.dumps(test_results, indent=4))
+#     return test_results
 
 def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
     # Configuration for hyperparameters to be tuned
@@ -105,6 +105,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
 
     execution_start_time = time.time()
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(data_config)
+
     result = ray.tune.run(
         ray.tune.with_parameters(LPU.scripts.KME.run_KME.train_model, dataloaders_dict=dataloaders_dict, with_ray=True),
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
@@ -121,29 +122,27 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
     LOG.info(f"Execution time: {execution_time} seconds")
 
     best_trial = result.get_best_trial("val_overall_loss", "min", "last")
-    best_model_state = torch.load(os.path.join(best_trial.checkpoint.path, "checkpoint.pt"))
-    breakpoint()
-    
-    best_model = LPU.models.geometric.KME.KME.KME(config=best_trial.config)
-    all_config = search_space.copy()
-    all_config.update(data_config)
+    best_model_checkpoint = torch.load(os.path.join(best_trial.checkpoint.path, "checkpoint.pt"))
+    best_model = LPU.models.geometric.KME.KME.KME(config=best_model_checkpoint["config"], 
+                                                  inducing_points_initial_vals=best_model_checkpoint["model_state"]["inducing_points"],
+                                                  training_size=len(dataloaders_dict['train'].dataset))
 
-    best_model.load_state_dict(best_model_state["model_state"])
+    best_model.load_state_dict(best_model_checkpoint["model_state"])
 
     best_model_test_results = best_model.validate(dataloaders_dict['test'], model=best_model.gp_model, loss_fn=best_model.loss_fn)
     final_epoch = best_trial.last_result["training_iteration"]
+    final_results = best_trial.last_result.copy()
     for key in best_trial.last_result:
         if 'val_' in key:
-            best_trial.last_result[key.replace('val', 'test')] = best_model_test_results['test'][''.join(key.split('_')[1:])]
-    
+            final_results[key.replace('val', 'test')] = best_model_test_results['_'.join(key.split('_')[1:])]
     best_trial_report = {
         "Best trial config": best_trial.config,
-        "Best trial final validation loss": best_trial.last_result["val_overall_loss"],
+        "Best trial final validation loss": final_results["val_overall_loss"],
         "Best trial final test scores": {
-            "test_overall_loss": best_trial.last_result["test_overall_loss"],
-            "test_y_auc": best_trial.last_result["test_y_auc"],
-            "test_y_accuracy": best_trial.last_result["test_y_accuracy"],
-            "test_y_APS": best_trial.last_result["test_y_APS"]
+            "test_overall_loss": final_results["test_overall_loss"],
+            "test_y_auc": final_results["test_y_auc"],
+            "test_y_accuracy": final_results["test_y_accuracy"],
+            "test_y_APS": final_results["test_y_APS"]
         },
         "Execution Time": execution_time,
         "Final epoch": final_epoch,

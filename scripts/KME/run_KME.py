@@ -13,51 +13,6 @@ import LPU.utils.utils_general
 torch.set_default_dtype(LPU.constants.DTYPE)
 
 USE_DEFAULT_CONFIG = False
-DEFAULT_CONFIG = {
-    # for VGP:
-    "thres_par": 0.1, 
-    "lambda_0": 1.0,
-    "lambda_1_increment": 0.05,
-    "set_seed": True,
-    "inducing_points_size": 32,
-    "learning_rate": 0.01,
-    "num_epochs": 10,
-    "stop_learning_lr": 1e-6,
-    "device": "cpu",
-    "epoch_block": 1, # Perform validation every EPOCH_BLOCK iterations
-    "kernel_mode": 2,
-    "intrinsic_kernel_params": {
-        "normed": False,
-        "kernel_type": "laplacian",
-        "heat_temp": 0.01,
-        "noise_factor": 0.0,
-        "amplitude": 0.5,
-        "n_neighbor": 5,
-        "lengthscale": 0.3,
-        "neighbor_mode": "distance",
-        "power_factor": 1,
-        "invert_M_first": False,
-    },
-    "dataset_name": "animal_no_animal",  # fashionMNIST
-    "dataset_kind": "LPU",
-    "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
-    'ratios': 
-    {
-        # *** NOTE ***
-        # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
-        # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        'test': 0.4,
-        'val': 0.05,
-        'holdout': .05,
-        'train': .5, 
-    },
-    "batch_size": {
-        "train": 64,
-        "test": 64,
-        "val": 64,
-        "holdout": 64
-    }
-}
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
 
@@ -77,7 +32,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
         config = {}
         
     # Load the base configuration
-    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(LPU.models.geometric.KME.KME.DEFAULT_CONFIG, config)
 
     if config['set_seed']:
         seed = config.get('random_state', LPU.constants.RANDOM_STATE)
@@ -86,6 +41,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
     inducing_points_size = config['inducing_points_size']
     if dataloaders_dict is None:
         dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+    # if inducing_points_initial_vals is None:
     inducing_points_initial_vals = LPU.utils.dataset_utils.initialize_inducing_points(
     dataloaders_dict['train'], inducing_points_size)        
 
@@ -93,7 +49,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
         config,
         inducing_points_initial_vals=inducing_points_initial_vals,
         training_size=len(dataloaders_dict['train'].dataset),
-        num_features=inducing_points_initial_vals.shape[-1]
+        # num_features=inducing_points_initial_vals.shape[-1]
     )
 
     # if with_ray:
@@ -147,7 +103,6 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
                 if score_type not in all_scores_dict[split]:
                     all_scores_dict[split][score_type] = []
                 all_scores_dict[split][score_type].append(score_value)
-
         LOG.info(f"Epoch {epoch}: {scores_dict}")
         # Check current learning rate
         current_lr = optimizer.param_groups[0]['lr']
@@ -155,11 +110,16 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
         if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
             with tempfile.TemporaryDirectory() as tempdir:
                 torch.save(
-                    {"epoch": epoch, "model_state": KME_model.state_dict()},
+                    {"epoch": epoch, 
+                     "model_state": KME_model.state_dict(),
+                     "config": config,},
                     os.path.join(tempdir, "checkpoint.pt"),
                 )
                 ray.train.report(metrics={
                         'val_overall_loss': scores_dict['val']['overall_loss'],
+                        'val_y_auc': scores_dict['val']['y_auc'],
+                        'val_y_accuracy': scores_dict['val']['y_accuracy'],
+                        'val_y_APS': scores_dict['val']['y_APS'],
                         'epoch': epoch,
                         'learning_rate': current_lr}, checkpoint=ray.train.Checkpoint.from_directory(tempdir))
 
@@ -185,7 +145,6 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
 
     # Report metrics if executed under Ray Tune
     if with_ray:
-        exit()
         if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
             ray.train.report(filtered_scores_dict)
         else:
