@@ -1,4 +1,3 @@
-
 import copy
 import tempfile
 import os
@@ -37,7 +36,7 @@ except ImportError:
 
 
 
-def train_model(config=None, dataloaders_dict=None):
+def train_model(config=None, dataloaders_dict=None, with_ray=False):
 
     if config is None:
         config = {}
@@ -131,7 +130,8 @@ def train_model(config=None, dataloaders_dict=None):
             mpe_model.set_C(l_mean=len(mpe_dataloaders_dict['holdout']['PDataset']) / (len(mpe_dataloaders_dict['holdout']['UDataset']) + len(mpe_dataloaders_dict['holdout']['PDataset'])))
             
         LOG.info(f"Train Epoch {epoch}: {scores_dict}")
-       # Add checkpointing code
+        
+        # Add checkpointing code
         if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
             with tempfile.TemporaryDirectory() as tempdir:
                 torch.save(
@@ -153,23 +153,33 @@ def train_model(config=None, dataloaders_dict=None):
     # Evaluate on the test set with the best model based on the validation set
     model.load_state_dict(best_model_state)
 
-    best_scores_dict['test'] = model.validate(epoch, p_validloader=mpe_dataloaders_dict['test']['PDataset'],
-                                                u_validloader=mpe_dataloaders_dict['test']['UDataset'],
-                                                criterion=criterion, threshold=0.5)
-
     # Flatten scores_dict
     flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
-        if 'train' in key or 'val' in key or 'test' in key:
+        if 'train' in key or 'val' in key:
             if 'epochs' not in key:
                 filtered_scores_dict[key] = value
-    LOG.info(f"Final test error: {best_scores_dict['test']}")
-
+                
     # Report metrics if executed under Ray Tune
-    if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
-        ray.train.report(filtered_scores_dict)
+    if with_ray:
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+            ray.train.report(filtered_scores_dict)
+        else:
+            raise ValueError("Ray is not connected or initialized. Please connect to Ray to use Ray functionalities.")
     else:
+        best_scores_dict['test'] = model.validate(epoch, p_validloader=mpe_dataloaders_dict['test']['PDataset'],
+                                                u_validloader=mpe_dataloaders_dict['test']['UDataset'],
+                                                criterion=criterion, threshold=0.5)
+                                                
+        flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
+        filtered_scores_dict = {}
+        for key, value in flattened_scores.items():
+            if 'train' in key or 'val' in key or 'test' in key:
+                if 'epochs' not in key:
+                    filtered_scores_dict[key] = value
+                    
+        LOG.info(f"Final test scores: {best_scores_dict['test']}")
         return all_scores_dict, best_epoch
 
 if __name__ == "__main__":
