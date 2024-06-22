@@ -32,7 +32,7 @@ import LPU.utils.dataset_utils
 import LPU.datasets.LPUDataset
 
 import LPU.models
-import LPU.models.vPU.vpu
+import LPU.models.vPU.vPU
 
 import LPU.utils.auxiliary_models
 import LPU.utils.plot_utils
@@ -80,11 +80,13 @@ def train_model(config=None, dataloaders_dict=None):
     if config is None:
         config = {}
     # Load the base configuration
-    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(LPU.models.vPU.vPU.DEFAULT_CONFIG, config)
 
-    if config['set_seed']:
-        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
-        LPU.utils.utils_general.set_seed(seed)
+    if 'random_state' in config and config['random_state'] is not None:
+        random_state = config['random_state']
+        # setting the seed for the training
+        LPU.utils.utils_general.set_seed(random_state)
+
 
     if dataloaders_dict is None:
         dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
@@ -115,25 +117,25 @@ def train_model(config=None, dataloaders_dict=None):
     ###########################################################################
     lowest_val_var = math.inf  # lowest variational loss on validation set
     highest_test_acc = -1 # highest test accuracy on test set
-    vpu_model = LPU.models.vPU.vpu.vPU(config=config, input_dim=dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
+    vPU_model = LPU.models.vPU.vPU.vPU(config=config, input_dim=dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
 
     l_mean = len(dataloaders_dict['train']['PDataset'].dataset) / (len(dataloaders_dict['train']['UDataset'].dataset) + len(dataloaders_dict['train']['PDataset'].dataset))
     lr_phi = config['learning_rate']
-    opt_phi = torch.optim.Adam(vpu_model.parameters(), lr=lr_phi, betas=(0.5, 0.99))
+    opt_phi = torch.optim.Adam(vPU_model.parameters(), lr=lr_phi, betas=(0.5, 0.99))
 
     all_scores_dict = {split: {'epochs': []} for split in ['train', 'val']}
     scores_dict = {split: {} for split in ['train', 'val']}
 
     best_epoch = -1
     best_val_loss = float('inf')
-    best_model_state = copy.deepcopy(vpu_model.state_dict())
+    best_model_state = copy.deepcopy(vPU_model.state_dict())
     for epoch in range(config['epochs']):
         # adjust the optimizer
         if epoch % 20 == 19:
             lr_phi /= 2
-            opt_phi = torch.optim.Adam(vpu_model.parameters(), lr=lr_phi, betas=(0.5, 0.99))
+            opt_phi = torch.optim.Adam(vPU_model.parameters(), lr=lr_phi, betas=(0.5, 0.99))
 
-        scores_dict['train'] = vpu_model.train_one_epoch(config=config,
+        scores_dict['train'] = vPU_model.train_one_epoch(config=config,
                                                                              opt_phi=opt_phi,
                                                                              p_loader=dataloaders_dict['train']['PDataset'],
                                                                              u_loader=dataloaders_dict['train']['UDataset'])
@@ -147,7 +149,7 @@ def train_model(config=None, dataloaders_dict=None):
 
         if config['dataset_kind'] in ['LPU', 'MPE']:
             test_loader = None
-        scores_dict['val'] = vpu_model.validate(train_p_loader=dataloaders_dict['train']['PDataset'],
+        scores_dict['val'] = vPU_model.validate(train_p_loader=dataloaders_dict['train']['PDataset'],
                                                 train_u_loader=dataloaders_dict['train']['UDataset'],
                                                 val_p_loader=dataloaders_dict['val']['PDataset'],
                                                 val_u_loader=dataloaders_dict['val']['UDataset'], epoch=epoch, train_phi_loss=avg_phi_loss,
@@ -166,7 +168,7 @@ def train_model(config=None, dataloaders_dict=None):
             best_val_loss = scores_dict['val']['overall_loss']
             best_epoch = epoch
             best_scores_dict = copy.deepcopy(scores_dict)
-            best_model_state = copy.deepcopy(vpu_model.state_dict())
+            best_model_state = copy.deepcopy(vPU_model.state_dict())
 
         if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
                         ray.train.report({
@@ -176,12 +178,12 @@ def train_model(config=None, dataloaders_dict=None):
 
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 
-    model = vpu_model
+    model = vPU_model
     # Evaluate on the test set with the best model based on the validation set
     model.load_state_dict(best_model_state)
 
     # Evaluate on the test set after training
-    scores_dict['test'] = vpu_model.validate(train_p_loader=dataloaders_dict['train']['PDataset'],
+    scores_dict['test'] = vPU_model.validate(train_p_loader=dataloaders_dict['train']['PDataset'],
                                              train_u_loader=dataloaders_dict['train']['UDataset'],
                                              val_p_loader=dataloaders_dict['test']['PDataset'],
                                              val_u_loader=dataloaders_dict['test']['UDataset'], epoch=epoch, train_phi_loss=None,

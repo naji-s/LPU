@@ -7,19 +7,23 @@ import datetime
 import time
 
 import LPU.scripts
-import LPU.scripts.vpu
-import LPU.scripts.vpu.run_vpu
+import LPU.scripts.vPU
+import LPU.scripts.vPU.run_vPU
 import LPU.utils.utils_general
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
-MODEL_NAME = 'vpu'
+MODEL_NAME = 'vPU'
 
 def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
+    # setting the seed for the tuning
+    if random_state is not None:
+        LPU.utils.utils_general.set_seed(random_state)
+        
     # Configuration for hyperparameters to be tuned
-    if random_state is None:
-        LOG.warning("seed_num is None. Setting it to 0.")
-        random_state = 0
     search_space = {
+        # making sure the model training is not gonna set the seed 
+        # since we potentially might want to set the seed for the tuning
+		"random_state": None,
         "random_state": random_state,
         "learning_rate": .01,
         "epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
@@ -44,7 +48,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
 
     execution_start_time = time.time()
     result = ray.tune.run(
-        LPU.scripts.vpu.run_vpu.train_model,
+        LPU.scripts.vPU.run_vPU.train_model,
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,

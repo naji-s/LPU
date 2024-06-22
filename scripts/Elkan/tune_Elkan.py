@@ -19,10 +19,14 @@ LOG = LPU.utils.utils_general.configure_logger(__name__)
 MODEL_NAME = 'Elkan'
 
 def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
-    if random_state is None:
-        LOG.warning("seed_num is None. Setting it to 0.")
-        random_state = 0
+    # setting the seed for the tuning
+    if random_state is not None:
+        LPU.utils.utils_general.set_seed(random_state)
+
     search_space = {
+        # making sure the model training is not gonna set the seed 
+        # since we potentially might want to set the seed for the tuning
+		"random_state": None,
         "random_state": random_state,
         "inducing_points_size": ray.tune.choice([64]),
         "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),

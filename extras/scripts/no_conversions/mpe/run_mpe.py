@@ -138,9 +138,11 @@ def create_dataloaders_dict_mpe(config, drop_last=False):
 
 def train_model(config=None, dataloaders_dict=None):
 
-    if config['set_seed']:
-        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
-        LPU.utils.utils_general.set_seed(seed)
+    if 'random_state' in config and config['random_state'] is not None:
+        random_state = config['random_state']
+        # setting the seed for the training
+        LPU.utils.utils_general.set_seed(random_state)
+
 
 
     if dataloaders_dict is None:

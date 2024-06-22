@@ -21,13 +21,16 @@ MODEL_NAME = 'mpe'
 
 
 def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
+    # setting the seed for the tuning
+    if random_state is not None:
+        LPU.utils.utils_general.set_seed(random_state)
+
+
     # Configuration for hyperparameters to be tuned
-    if random_state is None:
-        LOG.warning("seed_num is None. Setting it to 0.")
-        random_state = 0
-    # Set seed
-    LPU.utils.utils_general.set_seed(random_state)
     search_space = {
+        # making sure the model training is not gonna set the seed 
+        # since we potentially might want to set the seed for the tuning
+		"random_state": None,
         "random_state": random_state,
         "lr": .01,
         "momentum": ray.tune.uniform(0.1, 0.9),

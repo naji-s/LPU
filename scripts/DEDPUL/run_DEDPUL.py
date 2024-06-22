@@ -45,22 +45,15 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(LPU.models.DEDPUL.DEDPUL.DEFAULT_CONFIG, config)
 
-    if config['set_seed']:
-        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
-        LPU.utils.utils_general.set_seed(seed)
+    if 'random_state' in config and config['random_state'] is not None:
+        random_state = config['random_state']
+    # setting the seed for the training
+    LPU.utils.utils_general.set_seed(random_state)
+
 
 
     if dataloaders_dict is None:
         dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
-    
-
-    if 'random_state' in config and config['random_state'] is not None:
-        random_state = config['random_state']
-    else:
-        random_state = LPU.constants.RANDOM_STATE
-        
-    LPU.utils.utils_general.set_seed(random_state)
-
 
     # Initialize training components using the combined configuration
     torch.set_default_dtype(LPU.constants.DTYPE)

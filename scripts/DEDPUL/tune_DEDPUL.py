@@ -24,11 +24,14 @@ MODEL_NAME = 'dedpul'
 
 
 def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
-    if random_state is None:
-        LOG.warning("seed_num is None. Setting it to 0.")
-        random_state = 0
+    # setting the seed for the tuning
+    if random_state is not None:
+        LPU.utils.utils_general.set_seed(random_state)
+
     search_space = {
-        "random_state": random_state,
+        # making sure the model training is not gonna set the seed 
+        # since we potentially might want to set the seed for the tuning
+		"random_state": None,
         "learning_rate": 0.01,
         # "batch_size": {
         #     "train": ray.tune.choice([16, 32, 64]),

@@ -48,9 +48,11 @@ def load_config(config=None, model_name=None, file_path=None):
 
 def train_model(model_name=None, config=None):    
     config = load_config(config, model_name)
-    if config['set_seed']:
-        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
-        LPU.utils.utils_general.set_seed(seed)
+    if 'random_state' in config and config['random_state'] is not None:
+        random_state = config['random_state']
+        # setting the seed for the training
+        LPU.utils.utils_general.set_seed(random_state)
+
 
     data_loader_dict = get_data_loader_dict(config, model_name=model_name)
     model = load_model(model_name, config)

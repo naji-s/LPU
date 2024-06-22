@@ -35,9 +35,11 @@ def train_model(config=None, dataloaders_dict=None):
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
 
-    if config['set_seed']:
-        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
-        LPU.utils.utils_general.set_seed(seed)
+    if 'random_state' in config and config['random_state'] is not None:
+        random_state = config['random_state']
+        # setting the seed for the training
+        LPU.utils.utils_general.set_seed(random_state)
+
 
 
     if dataloaders_dict is None:

@@ -31,9 +31,11 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
     # Load the base configuration
     config = LPU.utils.utils_general.deep_update(LPU.models.geometric.PsychM.PsychM.DEFAULT_CONFIG, config)
 
-    if config['set_seed']:
-        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
-        LPU.utils.utils_general.set_seed(seed)
+    if 'random_state' in config and config['random_state'] is not None:
+        random_state = config['random_state']
+        # setting the seed for the training
+        LPU.utils.utils_general.set_seed(random_state)
+
 
     inducing_points_size = config['inducing_points_size']
     if dataloaders_dict is None:
@@ -45,9 +47,6 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
         config['input_dim'] = inducing_points_initial_vals.shape[-1]
         LOG.warning("input_dim is not defined in the config. Setting on based ont the dataset")
 
-    if config['set_seed']:
-        seed = config.get('random_state', LPU.constants.RANDOM_STATE)
-        LPU.utils.utils_general.set_seed(seed)
 
 
     PsychM_model = LPU.models.geometric.PsychM.PsychM.PsychM(
