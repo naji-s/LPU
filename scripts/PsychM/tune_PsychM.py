@@ -89,7 +89,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         mode='min',
         scheduler=scheduler,
         fail_fast=False,
-        local_dir=results_dir,
+        storage_path=results_dir,
         progress_reporter=reporter,
         keep_checkpoints_num=1)
     execution_time = time.time() - execution_start_time

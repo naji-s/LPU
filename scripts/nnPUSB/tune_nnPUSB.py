@@ -48,7 +48,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         metric='val_overall_loss',
         scheduler=scheduler,
         mode='min',
-        local_dir=results_dir,
+        storage_path=results_dir,
         progress_reporter=reporter,
         )
     execution_time = time.time() - execution_start_time
