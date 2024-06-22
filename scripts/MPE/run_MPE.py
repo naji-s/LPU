@@ -52,6 +52,8 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
 
     if dataloaders_dict is None:
         mpe_dataloaders_dict = LPU.models.MPE.MPE.create_dataloaders_dict_mpe(config)
+    else: 
+        mpe_dataloaders_dict = dataloaders_dict
     
 
 

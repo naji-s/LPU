@@ -12,7 +12,6 @@ import LPU.utils.auxiliary_models
 DEFAULT_CONFIG = {
     "dataset": "animal_no_animal",
     "input_dim": 4096,
-    "set_seed": True,
     "lr": 0.01,
     "wd": 0.0005,
     "momentum": 0.9,

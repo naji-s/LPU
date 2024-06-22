@@ -28,7 +28,6 @@ import LPU.utils.manifold_utils
 # logging.basicConfig(level=logging.INFO)  # Set the logging level as per your requirement
 
 DEFAULT_CONFIG = {
-    "set_seed": True,
     "inducing_points_size": 32,
     "learning_rate": 0.01,
     "num_epochs": 10,

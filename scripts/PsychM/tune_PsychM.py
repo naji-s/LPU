@@ -18,10 +18,6 @@ import LPU.utils.utils_general
 LOG = LPU.utils.utils_general.configure_logger(__name__)
 MODEL_NAME = 'psychm'
 
-TUNE_DEFAULT_CONFIG = {
-    "set_seed": True,
-}
-
 def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
     # setting the seed for the tuning
     if random_state is not None:

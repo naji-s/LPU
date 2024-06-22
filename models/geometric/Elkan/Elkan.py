@@ -22,7 +22,6 @@ import LPU.models.geometric.PsychM.PsychM
 
 DEFAULT_CONFIG = {
     # for VGP:
-    "set_seed": True,
     "inducing_points_size": 32,
     "learning_rate": 0.01,
     "num_epochs": 10,
