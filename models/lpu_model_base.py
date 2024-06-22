@@ -18,7 +18,8 @@ class LPUModelBase(torch.nn.Module):
             LOG.warning("No configuration provided. Using default configuration.")
             
         self.C = torch.nn.Parameter(torch.tensor(config.get('C', 1.0), dtype=LPU.constants.DTYPE), requires_grad=False)
-
+        self.prior = torch.nn.Parameter(torch.tensor(config.get('prior', 0.5), dtype=LPU.constants.DTYPE), requires_grad=False)
+        
     def _separate_labels(self, y):
         """
         Separates the labels into two separate arrays, one for l and one for y.

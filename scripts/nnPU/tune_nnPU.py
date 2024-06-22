@@ -13,6 +13,7 @@ import LPU.models.uPU
 import LPU.models.uPU.uPU
 import LPU.scripts.nnPU.run_nnPU
 import LPU.models.nnPU.nnPU
+import LPU.models.nnPUSB.nnPU_loss
 import LPU.utils.dataset_utils
 import LPU.utils.utils_general
 
@@ -28,10 +29,10 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
     LPU.utils.utils_general.set_seed(random_state)
     search_space = {
         "random_state": random_state,
-        "learning_rate": .01,
+        "learning_rate": .001,
         "epoch": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "gamma": ray.tune.uniform(0.1, 1.0),
-        "beta": 0.,
+        "beta": ray.tune.uniform(0., 1.0),
         "batch_size": {
             "train": ray.tune.choice([64]),
             "test": ray.tune.choice([64]),
@@ -93,7 +94,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
                                            dim=dataloaders_dict['train'].dataset.X.shape[-1])
     best_model.load_state_dict(best_model_checkpoint["model_state"])
 
-    loss_fn = LPU.external_libs.nnPUSB.nnPU_loss.nnPUloss(prior=best_model.prior,
+    loss_fn = LPU.models.nnPUSB.nnPU_loss.nnPUloss(prior=best_model.prior,
                                                           loss=LPU.models.uPU.uPU.select_loss('sigmoid'),
                                                           gamma=best_model_checkpoint["config"]['gamma'],
                                                           beta=best_model_checkpoint["config"]['beta'])

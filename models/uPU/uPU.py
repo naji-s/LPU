@@ -300,10 +300,10 @@ class uPU(LPU.models.lpu_model_base.LPUModelBase):
         X_all = torch.cat(X_all)
         y_all = torch.cat(y_all)
         l_all = torch.cat(l_all)
-        
-        self.C = l_all[y_all == 1.].mean().detach().cpu().numpy()
-        is_positive = y_all==1
-        self.prior = is_positive.mean() if type(is_positive) == 'numpy.ndarray' else  is_positive.detach().cpu().numpy().mean()
+        with torch.no_grad():        
+            self.C.fill_(l_all[y_all == 1.].mean())
+            is_positive = (y_all==1).to(LPU.constants.DTYPE)
+            self.prior.fill_(is_positive.mean())
         LOG.warning(f"\pi={self.prior} (the Y class prior) is passed using labeled data, since"
                     "the method needds it")
 
