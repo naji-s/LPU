@@ -2,6 +2,9 @@ import copy
 import logging
 import unittest.mock
 import types
+import tempfile
+import os
+
 import numpy as np
 import torch.optim
 import LPU.constants
@@ -32,11 +35,11 @@ except ImportError:
 
 
 
-def train_model(config=None, dataloaders_dict=None):
+def train_model(config=None, dataloaders_dict=None, with_ray=False):
     if config is None:
         config = {}
     # Load the base configuration
-    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(LPU.models.nnPU.nnPU.DEFAULT_CONFIG, config)
 
     if config['set_seed']:
         seed = config.get('random_state', LPU.constants.RANDOM_STATE)
@@ -57,14 +60,14 @@ def train_model(config=None, dataloaders_dict=None):
 
     optimizer = torch.optim.Adam([{
         'params': nnPU_model.parameters(),
-        'lr': config.get('learning_rate', DEFAULT_CONFIG.get('learning_rate', None) if USE_DEFAULT_CONFIG else None)
+        'lr': config.get('learning_rate', LPU.models.nnPU.nnPU.DEFAULT_CONFIG.get('learning_rate', None) if USE_DEFAULT_CONFIG else None)
     }])
     device = config.get('device', 'cpu')
     loss_fn = LPU.external_libs.nnPUSB.nnPU_loss.nnPUloss(prior=nnPU_model.prior,
                                          loss=LPU.models.uPU.uPU.select_loss('sigmoid'),
                                          gamma=gamma,
                                          beta=beta)
-    num_epochs = config.get('epoch', DEFAULT_CONFIG.get('epoch', None) if USE_DEFAULT_CONFIG else None)
+    num_epochs = config.get('epoch', LPU.models.nnPU.nnPU.get('epoch', None) if USE_DEFAULT_CONFIG else None)
 
     all_scores_dict = {split: {'epochs': []} for split in dataloaders_dict.keys()}
     scores_dict = {split: {} for split in dataloaders_dict.keys()}
@@ -92,12 +95,22 @@ def train_model(config=None, dataloaders_dict=None):
             best_epoch = epoch
             best_scores_dict = copy.deepcopy(scores_dict)
             best_model_state = copy.deepcopy(nnPU_model.state_dict())
-        # Report metrics if executed under Ray Tune
+
+        # Add checkpointing code
         if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
-                        ray.train.report({
-                            'val_overall_loss': scores_dict['val']['overall_loss'],
-                            'epoch': epoch,
-                            })        
+            with tempfile.TemporaryDirectory() as tempdir:
+                torch.save(
+                    {"epoch": epoch, 
+                     "model_state": nnPU_model.state_dict(),
+                     "config": config,},
+                    os.path.join(tempdir, "checkpoint.pt"),
+                )
+                ray.train.report(metrics={
+                        'val_overall_loss': scores_dict['val']['overall_loss'],
+                        'val_y_auc': scores_dict['val']['y_auc'],
+                        'val_y_accuracy': scores_dict['val']['y_accuracy'],
+                        'val_y_APS': scores_dict['val']['y_APS'],
+                        'epoch': epoch,}, checkpoint=ray.train.Checkpoint.from_directory(tempdir))
 
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 
@@ -105,21 +118,29 @@ def train_model(config=None, dataloaders_dict=None):
     # Evaluate on the test set with the best model based on the validation set
     model.load_state_dict(best_model_state)
 
-    best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=loss_fn, model=model.model)
-
     # Flatten scores_dict
     flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
-        if 'train' in key or 'val' in key or 'test' in key:
+        if 'train' in key or 'val' in key:
             if 'epochs' not in key:
                 filtered_scores_dict[key] = value
-    LOG.info(f"Final test error: {best_scores_dict['test']}")
 
     # Report metrics if executed under Ray Tune
-    if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
-        ray.train.report(filtered_scores_dict)
+    if with_ray:
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+            ray.train.report(filtered_scores_dict)
+        else:
+            raise ValueError("Ray is not connected or initialized. Please connect to Ray to use Ray functionalities.")
     else:
+        best_scores_dict['test'] = model.validate(dataloaders_dict['test'], loss_fn=loss_fn, model=model.model)
+        flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
+        filtered_scores_dict = {}
+        for key, value in flattened_scores.items():
+            if 'train' in key or 'val' in key or 'test' in key:
+                if 'epochs' not in key:
+                    filtered_scores_dict[key] = value
+        LOG.info(f"Final test scores: {best_scores_dict['test']}")
         return all_scores_dict, best_epoch
 
 if __name__ == "__main__":
