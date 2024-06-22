@@ -91,7 +91,7 @@ class GeometricGPLPUBase(LPU.models.lpu_model_base.LPUModelBase):
         self.gp_model = LPU.models.geometric.GVGP.GeometricVGP(
             inducing_points=self.inducing_points,
             intrinsic_kernel_params=self.intrinsic_kernel_params).to(self.device)
-        self.likelihood = self.CustomLikelihood(**kwargs).to(DEVICE).to(dtype=LPU.constants.DTYPE)
+        self.likelihood = self.CustomLikelihood(config=config, **kwargs).to(DEVICE).to(dtype=LPU.constants.DTYPE)
         self.mll = gpytorch.mlls.PredictiveLogLikelihood(
             self.likelihood,
             model=self.gp_model,
