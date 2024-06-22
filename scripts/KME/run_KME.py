@@ -52,18 +52,6 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
         # num_features=inducing_points_initial_vals.shape[-1]
     )
 
-    # if with_ray:
-    #     if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
-    #         checkpoint = ray.train.get_checkpoint()
-    #         if checkpoint:
-    #             with checkpoint.as_directory() as checkpoint_dir:
-    #                 checkpoint_dict = torch.load(os.path.join(checkpoint_dir, "checkpoint.pt"))
-    #                 start = checkpoint_dict["epoch"] + 1
-    #                 KME_model.load_state_dict(checkpoint_dict["model_state"])
-    #     else:
-    #         raise ValueError("Ray is not connected or initialized. Please connect to Ray to use Ray functionalities.")
-        
-
     learning_rate = config['learning_rate']
     num_epochs = config['num_epochs']
     epoch_block = config['epoch_block']
