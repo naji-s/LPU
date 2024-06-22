@@ -28,6 +28,7 @@ import LPU.utils.manifold_utils
 # logging.basicConfig(level=logging.INFO)  # Set the logging level as per your requirement
 
 DEFAULT_CONFIG = {
+    "set_seed": True,
     "inducing_points_size": 32,
     "learning_rate": 0.01,
     "num_epochs": 10,
@@ -71,17 +72,14 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
     
     class CustomLikelihood(gpytorch.likelihoods.Likelihood):
         SCALE = 1.
-        def __init__(self, config=None, num_features=None, warm_start_params=None, is_SPM=False, *args, **kwargs):
+        def __init__(self, config=None, *args, **kwargs):
             super().__init__()
-            if 'is_SPM' in kwargs:
-                warnings.warn("is_SPM is set through keyword arguments. This will override the value set in the config file.")
-                is_SPM = kwargs['is_SPM']
-            if 'warm_start_params' in kwargs:
-                warnings.warn("warm_start_params is set through keyword arguments. This will override the value set in the config file.")
-                warm_start_params = kwargs['warm_start_params']
-            if 'num_features' in kwargs:
-                warnings.warn("num_features is set through keyword arguments. This will override the value set in the config file.")
-                num_features = kwargs['num_features']
+            if config is None:
+                config = {}
+                LOG.warning("No config provided for PsycM likelihood. Using default config.")
+            is_SPM = config.get('is_SPM', False)
+            warm_start_params = config.get('warm_start_params', None)
+            input_dim = config.get('input_dim', None)
 
             duplicate_keys = set(config.keys()) & set(kwargs.keys())
             if duplicate_keys:
@@ -104,7 +102,7 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
             ################################################################################################            
             LOG.info(f"True alpha: {true_alpha}")
             LOG.info(f"True beta: {true_beta}")
-            self.variational_mean_alpha = torch.nn.Parameter(torch.zeros(num_features, dtype=LPU.constants.DTYPE))# + true_alpha)
+            self.variational_mean_alpha = torch.nn.Parameter(torch.zeros(input_dim, dtype=LPU.constants.DTYPE))# + true_alpha)
             # Parameter for the log of the diagonal elements to ensure they are positive
             # making sure no element of diagonal is too small to avoid overflow. 
             # Assuming LPU.constants.DTYPE and LPU.constants.EPSILON are predefined constants
@@ -112,20 +110,20 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
             epsilon = LPU.constants.EPSILON
 
             # Creating a random tensor and comparing it with EPSILON
-            random_tensor = torch.randn(num_features, dtype=dtype)
+            random_tensor = torch.randn(input_dim, dtype=dtype)
             safe_tensor = torch.max(random_tensor, torch.tensor(epsilon, dtype=dtype))
 
             # Setting this as a parameter
             self.log_diag = torch.nn.Parameter(safe_tensor)
             # Parameter for the lower triangular elements below the diagonal
-            # There are num_features * (num_features - 1) / 2 such elements
-            self.lower_tri = torch.nn.Parameter(torch.randn(num_features * (num_features - 1) // 2, dtype=LPU.constants.DTYPE))
-            # self.variational_covar_alpha = torch.nn.Parameter(torch.zeros(num_features))
-            # self.variational_covar_alpha_L = torch.nn.Parameter(torch.zeros(num_features))
-            # self.diag = torch.nn.Parameter(torch.randn(num_features))
+            # There are input_dim * (input_dim - 1) / 2 such elements
+            self.lower_tri = torch.nn.Parameter(torch.randn(input_dim * (input_dim - 1) // 2, dtype=LPU.constants.DTYPE))
+            # self.variational_covar_alpha = torch.nn.Parameter(torch.zeros(input_dim))
+            # self.variational_covar_alpha_L = torch.nn.Parameter(torch.zeros(input_dim))
+            # self.diag = torch.nn.Parameter(torch.randn(input_dim))
             # Parameter for the lower triangular elements below the diagonal
-            # There are num_features * (num_features - 1) / 2 such elements
-            # self.lower_tri = torch.nn.Parameter(torch.randn(num_features * (num_features - 1) // 2))
+            # There are input_dim * (input_dim - 1) / 2 such elements
+            # self.lower_tri = torch.nn.Parameter(torch.randn(input_dim * (input_dim - 1) // 2))
             
             self.variational_mean_beta = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE).squeeze())# + true_beta)
             self.variational_covar_beta = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE).squeeze()) 
@@ -143,7 +141,7 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
             self.lambda_var = torch.nn.Parameter(torch.randn(1, dtype=LPU.constants.DTYPE))
             self.anchor_weight = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE).squeeze(), requires_grad=False)
             self.train_GP = torch.nn.Parameter(torch.ones(1, dtype=LPU.constants.DTYPE).squeeze(), requires_grad=False)
-            # self.alpha = torch.nn.Parameter(torch.randn(num_features))
+            # self.alpha = torch.nn.Parameter(torch.randn(input_dim))
             # self.beta = torch.nn.Parameter(torch.randn(1))
             # log sigmoid is used in the forward layer for loss to reduce floating point errors
             # self.psych_logsigmoid = torch.nn.LogSigmoid()
@@ -151,7 +149,7 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
 
             # self.sigmoid = torch.nn.Sigmoid()
             # self.softmax = torch.nn.Softmax(0)
-            # self.L_param = torch.nn.Parameter(torch.randn(num_features, num_features))
+            # self.L_param = torch.nn.Parameter(torch.randn(input_dim, input_dim))
 
         def update_input_data(self, X):
             self.X = X
