@@ -43,13 +43,12 @@ def train_model(config=None, dataloaders_dict=None):
 
 
     if dataloaders_dict is None:
-        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
+                                                                       label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
     
 
 
 
-    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
-                                                                       label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
     X_example, _, _, _ = next(iter(dataloaders_dict['train']))
     dim = X_example.shape[-1]
     uPU_model = LPU.models.uPU.uPU.uPU(config=config, dim=dim)

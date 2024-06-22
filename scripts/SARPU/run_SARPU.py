@@ -58,10 +58,6 @@ def train_model(config=None, dataloaders_dict=None):
 
 
 
-
-
-    lpu_dataset = LPU.datasets.LPUDataset.LPUDataset(dataset_name='animal_no_animal')
-    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
     sarpu_em_model = LPU.models.SARPU.SARPU.SARPU(config, training_size=len(dataloaders_dict['train'].dataset))
 
     all_scores_dict = {split: {} for split in ['train', 'val']}

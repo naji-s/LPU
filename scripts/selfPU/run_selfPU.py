@@ -123,7 +123,11 @@ def train_model(config=None, dataloaders_dict=None):
 
 
     if dataloaders_dict is None:
-        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+        if config['dataset_kind'] == 'LPU':
+            dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
+                                                                       label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
+        else:
+            dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
     
 
     
@@ -159,10 +163,7 @@ def train_model(config=None, dataloaders_dict=None):
         X_train, Y_train, T_train, oids_train, prior_train = LPU.models.selfPU.dataset_utils.make_dataset(trainX=trainX, trainY=trainY, n_labeled=config['num_p'], n_unlabeled=n_u_train)
         X_val, Y_val, T_val, oids_val, prior_val = LPU.models.selfPU.dataset_utils.make_dataset(trainX=valX, trainY=valY, n_labeled=config['num_p'], n_unlabeled=n_u_val)
         X_test, Y_test, T_test, oids_test, prior_test = LPU.models.selfPU.dataset_utils.make_dataset(trainX=testX, trainY=testY, n_labeled=config['num_p'], n_unlabeled=n_u_test)
-    elif config['dataset_kind'] == 'LPU':
-        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
-                                                                       label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
-        
+    elif config['dataset_kind'] == 'LPU':        
         X_train = dataloaders_dict['train'].dataset.X.detach().cpu().numpy()
         T_train = dataloaders_dict['train'].dataset.y.detach().cpu().numpy()
         Y_train = dataloaders_dict['train'].dataset.l.detach().cpu().numpy()

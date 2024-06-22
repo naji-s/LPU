@@ -49,7 +49,8 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
 
 
     if dataloaders_dict is None:
-        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
+        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
+                                                                       label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
     
 
     gamma = config.get('gamma')

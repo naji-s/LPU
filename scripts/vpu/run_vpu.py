@@ -88,8 +88,6 @@ def train_model(config=None, dataloaders_dict=None):
         LPU.utils.utils_general.set_seed(random_state)
 
 
-    if dataloaders_dict is None:
-        dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
     
 
 
@@ -98,19 +96,20 @@ def train_model(config=None, dataloaders_dict=None):
     ###########################################################################
     # START: data preparation
     ###########################################################################
-    if config['dataset_kind'] in ['LPU', 'MPE']:
-        dataloaders_dict = LPU.scripts.mpe.run_mpe.create_dataloaders_dict_mpe(config, drop_last=True)
-    else:
-        get_loaders = get_loaders_by_dataset_name(config['dataset_name'])
-        # TODO: make sure the datasets are balanced coming out of this
-        x_loader, p_loader, val_x_loader, val_p_loader,  test_loader, idx = get_loaders(batch_size=config['batch_size']['train'], num_labeled=config['num_labeled'], positive_label_list=positive_label_list)
-        dataloaders_dict = {}
-        dataloaders_dict['train'] = {}
-        dataloaders_dict['train']['PDataset'] = p_loader
-        dataloaders_dict['train']['UDataset'] = x_loader
-        dataloaders_dict['val'] = {}
-        dataloaders_dict['val']['PDataset'] = val_p_loader
-        dataloaders_dict['val']['UDataset'] = val_x_loader
+    if dataloaders_dict is None:
+        if config['dataset_kind'] in ['LPU', 'MPE']:
+            dataloaders_dict = LPU.scripts.mpe.run_mpe.create_dataloaders_dict_mpe(config, drop_last=True)
+        else:
+            get_loaders = get_loaders_by_dataset_name(config['dataset_name'])
+            # TODO: make sure the datasets are balanced coming out of this
+            x_loader, p_loader, val_x_loader, val_p_loader,  test_loader, idx = get_loaders(batch_size=config['batch_size']['train'], num_labeled=config['num_labeled'], positive_label_list=positive_label_list)
+            dataloaders_dict = {}
+            dataloaders_dict['train'] = {}
+            dataloaders_dict['train']['PDataset'] = p_loader
+            dataloaders_dict['train']['UDataset'] = x_loader
+            dataloaders_dict['val'] = {}
+            dataloaders_dict['val']['PDataset'] = val_p_loader
+            dataloaders_dict['val']['UDataset'] = val_x_loader
 
     ###########################################################################
     # START: training

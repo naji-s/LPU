@@ -74,7 +74,8 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         reduction_factor=2)
 
     execution_start_time = time.time()
-    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(data_config)
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(data_config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
+                                                                       label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
 
     result = ray.tune.run(
         ray.tune.with_parameters(LPU.scripts.nnPU.run_nnPU.train_model, dataloaders_dict=dataloaders_dict, with_ray=True),

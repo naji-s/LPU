@@ -51,15 +51,13 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
 
 
     if dataloaders_dict is None:
-        dataloaders_dict = LPU.models.MPE.MPE.create_dataloaders_dict_mpe(config)
+        mpe_dataloaders_dict = LPU.models.MPE.MPE.create_dataloaders_dict_mpe(config)
     
 
 
     criterion = torch.nn.CrossEntropyLoss()
 
     mpe_model = LPU.models.MPE.MPE.MPE(config)
-
-    mpe_dataloaders_dict = LPU.models.MPE.MPE.create_dataloaders_dict_mpe(config)
 
     # mpe_model.initialize_model(mpe_dataloaders_dict['train']['UDataset'].dataset.data.shape[1])
     train_unlabeled_size = len(mpe_dataloaders_dict['train']['UDataset'].dataset.data)

@@ -57,7 +57,6 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
 
     # Initialize training components using the combined configuration
     torch.set_default_dtype(LPU.constants.DTYPE)
-    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
     dedpul_model = LPU.models.DEDPUL.DEDPUL.DEDPUL(config)
     
     # Train and report metrics

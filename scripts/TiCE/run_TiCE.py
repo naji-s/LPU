@@ -45,7 +45,6 @@ def train_model(config=None, dataloaders_dict=None):
 
 
     inducing_points_size = config['inducing_points_size']
-    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
     inducing_points_initial_vals = LPU.utils.dataset_utils.initialize_inducing_points(
         dataloaders_dict['train'], inducing_points_size)
     tice_model = LPU.models.TiCE.TiCE.TiCE(
