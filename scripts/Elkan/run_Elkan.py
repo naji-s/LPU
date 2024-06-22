@@ -61,7 +61,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
         'params': elkan_model.parameters(),
         'lr': learning_rate
     }])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=5)
 
     all_scores_dict = {split: {'epochs': []} for split in dataloaders_dict.keys()}
 
