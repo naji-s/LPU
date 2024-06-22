@@ -21,6 +21,7 @@ import LPU.models.lpu_model_base
 import LPU.external_libs.nnPUSB.nnPU_loss
 
 DEFAULT_CONFIG = {
+    "set_seed": True,
     "device": "cpu",
     "preset": "figure1",
     "dataset_name": "animal_no_animal",

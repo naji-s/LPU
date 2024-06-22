@@ -8,15 +8,15 @@ import os
 import numpy as np
 import torch.optim
 import LPU.constants
+import LPU.models.nnPUSB.nnPUSB
 import LPU.models.uPU.uPU
 import LPU.utils.dataset_utils
 import LPU.utils.dataset_utils
 import LPU.utils.utils_general
 import LPU.models.nnPU.nnPU
+import LPU.models.nnPUSB
+import LPU.models.nnPUSB.nnPU_loss
 import LPU.utils.plot_utils
-import LPU.external_libs.nnPUSB
-import LPU.external_libs.nnPUSB.nnPU_loss
-import LPU.external_libs.nnPUSB.dataset
 
 torch.set_default_dtype(LPU.constants.DTYPE)
 
@@ -63,7 +63,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
         'lr': config.get('learning_rate', LPU.models.nnPU.nnPU.DEFAULT_CONFIG.get('learning_rate', None) if USE_DEFAULT_CONFIG else None)
     }])
     device = config.get('device', 'cpu')
-    loss_fn = LPU.external_libs.nnPUSB.nnPU_loss.nnPUloss(prior=nnPU_model.prior,
+    loss_fn = LPU.models.nnPUSB.nnPU_loss.nnPUloss(prior=nnPU_model.prior,
                                          loss=LPU.models.uPU.uPU.select_loss('sigmoid'),
                                          gamma=gamma,
                                          beta=beta)
