@@ -2,14 +2,19 @@ import json
 import os
 import datetime
 import time
+import tempfile
 
 import ray.train
 import ray.tune
 import ray.tune.schedulers
+import torch
 
+import LPU.models.distPU.distPU
 import LPU.scripts
 import LPU.scripts.distPU
 import LPU.scripts.distPU.run_distPU
+import LPU.models.distPU
+import LPU.utils.dataset_utils
 import LPU.utils.utils_general
 
 
@@ -42,6 +47,28 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
             "holdout": ray.tune.choice([64])
         },
     }
+    data_config = {
+        "dataset_name": "animal_no_animal",  # fashionMNIST
+        "dataset_kind": "LPU",
+        "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
+        "device": "cpu",
+        'ratios':
+        {
+            # *** NOTE ***
+            # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+            # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+            'test': 0.4,
+            'val': 0.05,
+            'holdout': .05,
+            'train': .5,
+        },
+        "batch_size": {
+            "train": 64,
+            "test": 64,
+            "val": 64,
+            "holdout": 64
+        }
+    }
 
     reporter = ray.tune.CLIReporter(metric_columns=[
         "val_overall_loss", "val_y_auc", "val_y_accuracy", "val_y_APS"])
@@ -51,8 +78,10 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         reduction_factor=2)
 
     execution_start_time = time.time()
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(data_config)
+
     result = ray.tune.run(
-        LPU.scripts.distPU.run_distPU.train_model,
+        ray.tune.with_parameters(LPU.scripts.distPU.run_distPU.train_model, dataloaders_dict=dataloaders_dict, with_ray=True),
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,
@@ -61,21 +90,34 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         mode='min',
         local_dir=results_dir,
         progress_reporter=reporter,
+        keep_checkpoints_num=1
         )
     execution_time = time.time() - execution_start_time
     LOG.info(f"Execution time: {execution_time} seconds")
 
     best_trial = result.get_best_trial("val_overall_loss", "min", "last")
+    best_model_checkpoint = torch.load(os.path.join(best_trial.checkpoint.path, "checkpoint.pt"))
+    best_model = LPU.models.distPU.distPU.distPU(config=best_model_checkpoint["config"],
+                                          dim=torch.flatten(dataloaders_dict['train'].dataset.X, 1).shape[1])
+    best_model.load_state_dict(best_model_checkpoint["model_state"])
+
+    best_model_test_results = best_model.validate(dataloaders_dict['test'], loss_fn=LPU.models.distPU.distPU.create_loss(best_model_checkpoint["config"]), model=best_model.model)
+    final_epoch = best_trial.last_result["training_iteration"]
+    final_results = best_trial.last_result.copy()
+    for key in best_trial.last_result:
+        if 'val_' in key:
+            final_results[key.replace('val', 'test')] = best_model_test_results['_'.join(key.split('_')[1:])]
     best_trial_report = {
         "Best trial config": best_trial.config,
-        "Best trial final validation loss": best_trial.last_result["val_overall_loss"],
+        "Best trial final validation loss": final_results["val_overall_loss"],
         "Best trial final test scores": {
-            "test_overall_loss": best_trial.last_result["test_overall_loss"],
-            "test_y_auc": best_trial.last_result["test_y_auc"],
-            "test_y_accuracy": best_trial.last_result["test_y_accuracy"],
-            "test_y_APS": best_trial.last_result["test_y_APS"]
+            "test_overall_loss": final_results["test_overall_loss"],
+            "test_y_auc": final_results["test_y_auc"],
+            "test_y_accuracy": final_results["test_y_accuracy"],
+            "test_y_APS": final_results["test_y_APS"]
         },
         "Execution Time": execution_time,
+        "Final epoch": final_epoch,
     }
     # Storing results in a JSON file
     EXPERIMENT_DATETIME = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -90,7 +132,6 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
 
     print(json.dumps(best_trial_report, indent=4))
     return best_trial_report
-
 
 if __name__ == "__main__":
     args = LPU.utils.utils_general.tune_parse_args()

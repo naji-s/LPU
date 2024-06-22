@@ -92,12 +92,13 @@ def get_predicted_scores(data_loader, model, device):
 CLASS_PRIOR = {
     'cifar-10': 0.4,
     'fmnist': 0.4,
-    'alzheimer': 0.5
+    'alzheimer': 0.5,
+    'animal_no_animal': 0.5,
 }
 
 def create_loss(config, prior=None):
     if prior is None:
-        prior = CLASS_PRIOR[config['dataset']]
+        prior = CLASS_PRIOR[config['dataset_name']]
     print('prior: {}'.format(prior))
     if config['loss'] == 'Dist-PU':
         base_loss = LPU.external_libs.distPU.losses.distributionLoss.LabelDistributionLoss(prior=prior, device=config['device'])
@@ -198,7 +199,7 @@ class distPU(LPU.models.lpu_model_base.LPUModelBase):
         return predicted_prob.cpu().numpy().squeeze()
 
     def predict_prob_l_given_y_X(self, X=None, f_x=None):
-        return self.C
+        return self.C.detach().cpu().numpy()
 
     def set_C(self, holdout_dataloader):
         X_all = []
@@ -211,5 +212,6 @@ class distPU(LPU.models.lpu_model_base.LPUModelBase):
         X_all = torch.cat(X_all)
         y_all = torch.cat(y_all)
         l_all = torch.cat(l_all)
-        self.C = l_all[y_all == 1].mean().detach().cpu().numpy()
+        with torch.no_grad():
+            self.C.fill_(l_all[y_all == 1].mean())    
         self.prior = y_all.mean().detach().cpu().numpy()
