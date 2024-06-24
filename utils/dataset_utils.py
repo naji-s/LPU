@@ -132,7 +132,7 @@ def index_group_split(index_arr=None, ratios_dict=None, random_state=None, strat
 def make_data_loader(dataset, batch_size, sampler=None, drop_last=False):
     if batch_size is None:
         batch_size = len(dataset)
-    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, drop_last=drop_last, pin_memory=True, num_workers=1, persistent_workers=True)
+    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, drop_last=drop_last, pin_memory=True, num_workers=1, persistent_workers=False)
     return sampler, dataloader
 
 
