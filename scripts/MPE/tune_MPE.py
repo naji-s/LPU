@@ -30,8 +30,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
     search_space = {
         # making sure the model training is not gonna set the seed 
         # since we potentially might want to set the seed for the tuning
-		"random_state": None,
-        "random_state": random_state,
+		"random_state": ray.tune.randint(0, 1000),
         "lr": .01,
         "momentum": ray.tune.uniform(0.1, 0.9),
         "wd": ray.tune.loguniform(1e-6, 1e-2),

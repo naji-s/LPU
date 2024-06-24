@@ -8,12 +8,12 @@ import ray.tune
 import ray.tune.schedulers
 
 import LPU.scripts
-import LPU.scripts.tice
-import LPU.scripts.tice.run_tice
+import LPU.scripts.TiCE
+import LPU.scripts.TiCE.run_TiCE
 import LPU.utils.utils_general
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
-MODEL_NAME = 'tice'
+MODEL_NAME = 'TiCE'
 
 def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
     # setting the seed for the tuning
@@ -26,7 +26,6 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         # making sure the model training is not gonna set the seed 
         # since we potentially might want to set the seed for the tuning
 		"random_state": None,
-        "random_state": random_state,
         "inducing_points_size": 64,
         "learning_rate": 0.01, 
         "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
@@ -69,7 +68,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
 
     execution_start_time = time.time()
     result = ray.tune.run(
-        LPU.scripts.tice.run_tice.train_model,
+        LPU.scripts.TiCE.run_TiCE.train_model,
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,

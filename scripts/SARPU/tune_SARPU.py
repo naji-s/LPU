@@ -26,7 +26,6 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         # making sure the model training is not gonna set the seed 
         # since we potentially might want to set the seed for the tuning
 		"random_state": None,
-        "random_state": random_state,
         "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "SAR_PU_classification_model": ray.tune.choice(['logistic']),
         "svm_params": {

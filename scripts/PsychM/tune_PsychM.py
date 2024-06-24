@@ -28,8 +28,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
     search_space = {
         # making sure the model training is not gonna set the seed 
         # since we potentially might want to set the seed for the tuning
-		"random_state": None,
-        "random_state": random_state,
+		"random_state": ray.tune.randint(0, 1000),
         "inducing_points_size": ray.tune.choice([64]),
         "learning_rate": .01,
         "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
@@ -50,10 +49,6 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
             "holdout": ray.tune.choice([64])
         },
     }
-
-    if random_state is not None:
-        # since we have set the random state for the tuning, we should not set it for the model
-        search_space["random_state"] = None
 
 
     data_config = {
@@ -78,7 +73,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
             "holdout": 64
         }
     }
-
+    breakpoint()
     reporter = ray.tune.CLIReporter(metric_columns=[
         "val_overall_loss", "val_y_auc", "val_y_accuracy", "val_y_APS",
         "test_overall_loss", "test_y_auc", "test_y_accuracy", "test_y_APS"])

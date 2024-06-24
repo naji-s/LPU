@@ -26,7 +26,6 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         # making sure the model training is not gonna set the seed 
         # since we potentially might want to set the seed for the tuning
 		"random_state": None,
-        "random_state": random_state,
         "lr": .01,
         "weight_decay": ray.tune.loguniform(1e-6, 1e-3),
         "epochs": ray.tune.randint(max_num_epochs, max_num_epochs + 1),
