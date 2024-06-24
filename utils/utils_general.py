@@ -55,6 +55,8 @@ def set_seed(seed):
     random.seed(seed)  # For Python's `random` module
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    # Ensure use of deterministic algorithms
+    torch.use_deterministic_algorithms(True)    
 
 def configure_logger(module_name):
     logger = logging.getLogger(module_name)
