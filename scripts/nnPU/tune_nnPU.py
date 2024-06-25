@@ -30,17 +30,17 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
     search_space = {
         # making sure the model training is not gonna set the seed 
         # since we potentially might want to set the seed for the tuning
-		"random_state": None,
+		"random_state": ray.tune.randint(0, 1000),
         "learning_rate": .001,
         "epoch": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "gamma": ray.tune.uniform(0.1, 1.0),
         "beta": ray.tune.uniform(0., 1.0),
-        "batch_size": {
-            "train": ray.tune.choice([64]),
-            "test": ray.tune.choice([64]),
-            "val": ray.tune.choice([64]),
-            "holdout": ray.tune.choice([64])
-        },
+        # "batch_size": {
+        #     "train": ray.tune.choice([64]),
+        #     "test": ray.tune.choice([64]),
+        #     "val": ray.tune.choice([64]),
+        #     "holdout": ray.tune.choice([64])
+        # },
     }
     data_config = {
         "dataset_name": "animal_no_animal",  # fashionMNIST

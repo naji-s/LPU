@@ -1,5 +1,8 @@
 import logging
 import unittest.mock
+import tempfile
+import os
+
 import numpy as np
 import torch
 import LPU.constants
@@ -39,11 +42,11 @@ except ImportError:
     LOG.warning("Ray is not available. Please install Ray to enable distributed training.")
     RAY_AVAILABLE = False
 
-def train_model(config=None, dataloaders_dict=None):
+def train_model(config=None, dataloaders_dict=None, with_ray=False):
     if config is None:
         config = {}
     # Load the base configuration
-    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(LPU.models.SARPU.SARPU.DEFAULT_CONFIG, config)
 
     if 'random_state' in config and config['random_state'] is not None:
         random_state = config['random_state']
@@ -58,38 +61,53 @@ def train_model(config=None, dataloaders_dict=None):
 
 
 
-    sarpu_em_model = LPU.models.SARPU.SARPU.SARPU(config, training_size=len(dataloaders_dict['train'].dataset))
+    SARPU_model = LPU.models.SARPU.SARPU.SARPU(config, training_size=len(dataloaders_dict['train'].dataset))
 
     all_scores_dict = {split: {} for split in ['train', 'val']}
     scores_dict = {split: {} for split in ['train', 'val']}
 
-    scores_dict['train'] = sarpu_em_model.train(dataloaders_dict['train'])
+    scores_dict['train'] = SARPU_model.train(dataloaders_dict['train'])
     if 'val' in dataloaders_dict:
-        scores_dict['val'] = sarpu_em_model.validate(dataloaders_dict['val'], loss_fn=sarpu_em_model.loss_fn)
+        scores_dict['val'] = SARPU_model.validate(dataloaders_dict['val'], loss_fn=SARPU_model.loss_fn)
 
     for split in ['train', 'val']:
         if 'val' in dataloaders_dict and split == 'val':
             all_scores_dict[split].update(scores_dict[split])
 
-    # Evaluate on the test set after training
-    scores_dict['test'] = sarpu_em_model.validate(dataloaders_dict['test'], loss_fn=sarpu_em_model.loss_fn)
-
-    LOG.info(f"Scores: {scores_dict}")
-    # LPU.utils.plot_utils.plot_scores(all_scores_dict, loss_type='overall_loss')
-
     # Flatten scores_dict
     flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
-        if 'train' in key or 'val' in key or 'test' in key:
+        if 'train' in key or 'val' in key:
             if 'epochs' not in key:
                 filtered_scores_dict[key] = value
-    print("Reporting Metrics: ", filtered_scores_dict)  # Debug print to check keys
+
+    # Add checkpointing code
+    if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+        with tempfile.TemporaryDirectory() as tempdir:
+            torch.save(
+                {"model_state": SARPU_model.state_dict(),
+                 "config": config,},
+                os.path.join(tempdir, "checkpoint.pt"),
+            )
+            ray.train.report(metrics=filtered_scores_dict, checkpoint=ray.train.Checkpoint.from_directory(tempdir))
 
     # Report metrics if executed under Ray Tune
-    if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
-        ray.train.report(filtered_scores_dict)
+    if with_ray:
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+            ray.train.report(filtered_scores_dict)
+        else:
+            raise ValueError("Ray is not connected or initialized. Please connect to Ray to use Ray functionalities.")
     else:
+        # Evaluate on the test set after training
+        scores_dict['test'] = SARPU_model.validate(dataloaders_dict['test'], loss_fn=SARPU_model.loss_fn)
+        flattened_scores = LPU.utils.utils_general.flatten_dict(scores_dict)
+        filtered_scores_dict = {}
+        for key, value in flattened_scores.items():
+            if 'train' in key or 'val' in key or 'test' in key:
+                if 'epochs' not in key:
+                    filtered_scores_dict[key] = value
+        LOG.info(f"Final test scores: {scores_dict['test']}")
         return all_scores_dict
 
 if __name__ == "__main__":

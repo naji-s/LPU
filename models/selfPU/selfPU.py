@@ -168,6 +168,10 @@ class selfPU(LPU.models.lpu_model_base.LPUModelBase):
         self.dim = self.config.get('dim', 784)
         self.switched = switched    
         self.mean_teacher_step = 0
+        self.model1 = None
+        self.model2 = None
+        self.ema_model1 = None
+        self.ema_model2 = None
 
     def create_meta_mlp(self):
         return LPU.external_libs.Self_PU.meta_models.MetaMLP(dim=self.dim)

@@ -13,7 +13,7 @@ MODEL_PATHS_DICT = {
     'nnPUSB': 'LPU.models.nnPUSB.nnPUSB',
     'sarpu': 'LPU.models.SARPU.SARPU',
     'selfPU': 'LPU.models.selfPU.selfPU',
-    'TiCE': 'LPU.models.TiCE.TiCE',
+    'TIcE': 'LPU.models.TIcE.TIcE',
     'uPU': 'LPU.models.uPU.uPU',
     'vpu': 'LPU.models.VPU.vPU',
     'KME': 'LPU.models.geometric.KME.KME',

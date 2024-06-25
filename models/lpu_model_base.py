@@ -189,12 +189,12 @@ class LPUModelBase(torch.nn.Module):
     def validate(self, dataloader, loss_fn=None, model=None):
         scores_dict = {}
         total_loss = 0.
-        l_batch_concat = []
-        y_batch_concat = []
-        y_batch_concat_prob = []
-        l_batch_concat_prob = []
-        l_batch_concat_est = []
-        y_batch_concat_est = []
+        l = []
+        y = []
+        y_prob = []
+        l_prob = []
+        l_est = []
+        y_est = []
         if hasattr(model, 'eval'):
             model.eval()
         binary_kind = set(np.unique(dataloader.dataset.y if hasattr(dataloader.dataset, 'y') else dataloader.dataset.Y))
@@ -223,25 +223,25 @@ class LPUModelBase(torch.nn.Module):
 
                 total_loss += loss.item()
 
-                l_batch_concat.append(l_batch.detach().cpu().numpy())
-                y_batch_concat.append(y_batch.detach().cpu().numpy())
-                y_batch_concat_prob.append(y_batch_prob.detach().cpu().numpy())
-                l_batch_concat_prob.append(l_batch_prob.detach().cpu().numpy())
-                y_batch_concat_est.append(y_batch_est.detach().cpu().numpy())
-                l_batch_concat_est.append(l_batch_est.detach().cpu().numpy())   
+                l.append(l_batch.detach().cpu().numpy())
+                y.append(y_batch.detach().cpu().numpy())
+                y_prob.append(y_batch_prob.detach().cpu().numpy())
+                l_prob.append(l_batch_prob.detach().cpu().numpy())
+                y_est.append(y_batch_est.detach().cpu().numpy())
+                l_est.append(l_batch_est.detach().cpu().numpy())   
 
-        y_batch_concat_prob = np.concatenate(y_batch_concat_prob)
-        l_batch_concat_prob = np.concatenate(l_batch_concat_prob)
-        y_batch_concat_est = np.concatenate(y_batch_concat_est)
-        l_batch_concat_est = np.concatenate(l_batch_concat_est)
-        y_batch_concat = np.concatenate(y_batch_concat)
-        l_batch_concat = np.concatenate(l_batch_concat)
+        y_prob = np.concatenate(y_prob)
+        l_prob = np.concatenate(l_prob)
+        y_est = np.concatenate(y_est)
+        l_est = np.concatenate(l_est)
+        y = np.concatenate(y)
+        l = np.concatenate(l)
 
         if binary_kind == {-1, 1}:
-            y_batch_concat = (y_batch_concat + 1) / 2
-            l_batch_concat = (l_batch_concat + 1) / 2
+            y = (y + 1) / 2
+            l = (l + 1) / 2
         scores_dict = self._calculate_validation_metrics(
-            y_batch_concat_prob, y_batch_concat, l_batch_concat_prob, l_batch_concat, l_ests=l_batch_concat_est, y_ests=y_batch_concat_est
+            y_prob, y, l_prob, l, l_ests=l_est, y_ests=y_est
         )
 
         # for score_type in scores_dict:

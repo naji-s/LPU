@@ -10,15 +10,10 @@ import sys
 import LPU.models.uPU.uPU
 sys.path.append('LPU/external_libs/nnPUSB')
 
-import numpy as np
-import torch
-import scipy.special
-
 import LPU.constants
 import LPU.external_libs
 import LPU.models.geometric.Elkan.Elkan
 import LPU.models.lpu_model_base
-import LPU.external_libs.nnPUSB.nnPU_loss
 
 DEFAULT_CONFIG = {
     "device": "cpu",

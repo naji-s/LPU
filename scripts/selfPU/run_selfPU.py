@@ -1,4 +1,3 @@
-
 import copy
 import random
 
@@ -6,6 +5,11 @@ import sys
 sys.path.append('LPU/external_libs/PU_learning')
 sys.path.append('LPU/external_libs/PU_learning/data_helper')
 sys.path.append('LPU/models/selfPU/selfPU')
+
+import torchvision
+import torch.backends.cudnn
+
+
 import LPU.external_libs.Self_PU
 import LPU.external_libs.Self_PU.cifar_datasets
 import LPU.external_libs.Self_PU.datasets
@@ -16,12 +20,10 @@ import LPU.external_libs.Self_PU.meta_models
 import LPU.external_libs.Self_PU.models
 import LPU.external_libs.Self_PU.utils
 import LPU.external_libs.Self_PU.utils.util
-
-import torchvision
-import torch.backends.cudnn
-
 import LPU.models.selfPU.selfPU
 import LPU.models.selfPU.dataset_utils
+
+
 
 
 from matplotlib import pyplot as plt
@@ -37,6 +39,9 @@ import LPU.utils.plot_utils
 import LPU.utils.utils_general
 
 import sklearn.model_selection
+
+import tempfile
+import os
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
 
@@ -72,6 +77,9 @@ def get_criterion(config):
 
     return criterion
 
+def identity(x):
+    return x
+
 def make_transformations(dataset_name):
     transformations = {
         'cifar': {
@@ -100,19 +108,19 @@ def make_transformations(dataset_name):
         },
         'animal_no_animal':
         {
-            'train': lambda x: x,
-            'val': lambda x: x
+            'train': identity,
+            'val': identity
         }
         
     }
 
     return transformations[dataset_name]
 
-def train_model(config=None, dataloaders_dict=None):
+def train_model(config=None, dataloaders_dict=None, with_ray=False):
     if config is None:
         config = {}
     # Load the base configuration
-    config = LPU.utils.utils_general.deep_update(DEFAULT_CONFIG, config)
+    config = LPU.utils.utils_general.deep_update(LPU.models.selfPU.selfPU.DEFAULT_CONFIG, config)
 
 
     if 'random_state' in config and config['random_state'] is not None:
@@ -255,8 +263,6 @@ def train_model(config=None, dataloaders_dict=None):
                                   weight_decay=config['weight_decay'])
 
     stats_ = LPU.external_libs.Self_PU.functions.stats(config['modeldir'], 0)
-    #scheduler1 = torch.optim.lr_scheduler.MultiStepLR(optimizer1, milestones=[15, 60], gamma=0.7)
-    #scheduler2 = torch.optim.lr_scheduler.MultiStepLR(optimizer2, milestones=[15, 60], gamma=0.7)
     scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer1, config['epochs'])
     scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer2, config['epochs'])
 
@@ -303,8 +309,6 @@ def train_model(config=None, dataloaders_dict=None):
 
             dataloader_train1_clean, dataloader_train1_noisy, dataloader_train2_clean, dataloader_train2_noisy = selfPU_model.update_dataset(selfPU_model.model1, selfPU_model.model2, selfPU_model.ema_model1, selfPU_model.ema_model2, dataset_train1_clean, dataset_train1_noisy, dataset_train2_clean, dataset_train2_noisy, epoch, )
 
-        # LPU.external_libs.Self_PU.functions.plot_curve(stats_, config['modeldir'], 'model', True)
-
         dataset_train1_noisy.shuffle()
         dataset_train2_noisy.shuffle()
         dataloader_train1_noisy = torch.utils.data.DataLoader(dataset_train1_noisy, batch_size=config['batch_size']['train'], num_workers=config['workers'], shuffle=False, pin_memory=True)
@@ -317,32 +321,56 @@ def train_model(config=None, dataloaders_dict=None):
             best_scores_dict = copy.deepcopy(scores_dict)
             best_model_state = copy.deepcopy(selfPU_model.state_dict())
 
+        # Add checkpointing code
         if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
-                        ray.train.report({
-                            'val_overall_loss': scores_dict['val']['overall_loss'],
-                            'epoch': epoch,
-                            })        
+            with tempfile.TemporaryDirectory() as tempdir:
+                torch.save(
+                    {"epoch": epoch,
+                     "model_state": selfPU_model.state_dict(),
+                     "config": config,
+                     "model1": selfPU_model.model1.state_dict(),
+                     "model2": selfPU_model.model2.state_dict(),
+                     "ema_model1": selfPU_model.ema_model1.state_dict(),
+                     "ema_model2": selfPU_model.ema_model2.state_dict(),
+                     "dataloader_test": dataloader_test,},
+                    os.path.join(tempdir, "checkpoint.pt"),
+                )
+                ray.train.report(metrics={
+                    'val_overall_loss': scores_dict['val']['overall_loss'],
+                    'val_y_auc': scores_dict['val']['y_auc'],
+                    'val_y_accuracy': scores_dict['val']['y_accuracy'],
+                    'val_y_APS': scores_dict['val']['y_APS'],
+                    'epoch': epoch,}, checkpoint=ray.train.Checkpoint.from_directory(tempdir))
+
     LOG.info(f"Best epoch: {best_epoch}, Best validation overall_loss: {best_val_loss:.5f}")
 
     model = selfPU_model
     # Evaluate on the test set with the best model based on the validation set
     model.load_state_dict(best_model_state)
 
-    best_scores_dict['test'] = model.validate(dataloader_test, loss_fn=criterion, model=model.model1)
-
     # Flatten scores_dict
     flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
-        if 'train' in key or 'val' in key or 'test' in key:
+        if 'train' in key or 'val' in key:
             if 'epochs' not in key:
                 filtered_scores_dict[key] = value
-    LOG.info(f"Final test error: {best_scores_dict['test']}")
 
     # Report metrics if executed under Ray Tune
-    if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
-        ray.train.report(filtered_scores_dict)
+    if with_ray:
+        if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
+            ray.train.report(filtered_scores_dict)
+        else:
+            raise ValueError("Ray is not connected or initialized. Please connect to Ray to use Ray functionalities.")
     else:
+        best_scores_dict['test'] = model.validate(dataloader_test, loss_fn=criterion, model=model.model1)
+        flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
+        filtered_scores_dict = {}
+        for key, value in flattened_scores.items():
+            if 'train' in key or 'val' in key or 'test' in key:
+                if 'epochs' not in key:
+                    filtered_scores_dict[key] = value
+        LOG.info(f"Final test scores: {best_scores_dict['test']}")
         return all_scores_dict, best_epoch
 
 if __name__ == "__main__":

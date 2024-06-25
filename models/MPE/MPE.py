@@ -49,11 +49,18 @@ DEFAULT_CONFIG = {
         "val": 64,
         "holdout": 64
     },
+    "drop_last":
+    {
+        "train": True,
+        "test": False,
+        "val": False,
+        "holdout": False
+    },
     "data_generating_process": "SB"  # either of CC (case-control) or SB (selection-bias)
 }
 
 
-def create_dataloaders_dict_mpe(config, drop_last=False):
+def create_dataloaders_dict_mpe(config):
     # dataloders_dict = {}
     # samplers_dict = {}
     mpe_dataset_dict = {}
@@ -72,7 +79,9 @@ def create_dataloaders_dict_mpe(config, drop_last=False):
             mpe_dataset_dict[split], mpe_indices_dict[split] = LPU.utils.dataset_utils.LPUD_to_MPED(lpu_dataset=lpu_dataset, indices=split_indices_dict[split], data_generating_process=data_generating_process)
             mpe_dataloaders_dict[split] = {}
             for dataset_type in mpe_dataset_dict[split].keys():
-                mpe_dataloaders_dict[split][dataset_type] = torch.utils.data.DataLoader(mpe_dataset_dict[split][dataset_type], batch_size=config['batch_size'][split], drop_last=drop_last, shuffle=True)
+                # setting drop_last False in case it is not set in the config
+                drop_last_split = config.get('drop_last', {split: False})[split]
+                mpe_dataloaders_dict[split][dataset_type] = torch.utils.data.DataLoader(mpe_dataset_dict[split][dataset_type], batch_size=config['batch_size'][split], drop_last=drop_last_split, shuffle=True)
     elif config['dataset_kind'] == 'MPE':
         p_trainloader, u_trainloader, p_validloader, u_validloader, net, X, Y, p_validdata, u_validdata, u_traindata, p_traindata = \
                 LPU.external_libs.PU_learning.helper.get_dataset(config['data_dir'], config['data_type'], config['net_type'], config['device'], config['alpha'], config['beta'], config['batch_size'])
@@ -232,7 +241,7 @@ class MPE(LPU.models.lpu_model_base.LPUModelBase):
         Estimates the alpha value using the BBE estimator.
 
         NOTE: in the original code (https://github.com/acmi-lab/PU_learning/blob/5e5e350dc0588de95a36eb952e3cf5382e786aec/train_PU.py#L130)
-        alpha is estimated using validation set, which is also used as the test set. This is not a good practice, hence below we use the holdout set.
+        alpha is estimated using validation set, which is also used as the test set. This is not a good pracTIcE, hence below we use the holdout set.
 
         Args:
             net (object): The neural network model.

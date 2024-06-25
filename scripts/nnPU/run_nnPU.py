@@ -70,7 +70,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
                                          loss=LPU.models.uPU.uPU.select_loss('sigmoid'),
                                          gamma=gamma,
                                          beta=beta)
-    num_epochs = config.get('epoch', LPU.models.nnPU.nnPU.get('epoch', None) if USE_DEFAULT_CONFIG else None)
+    num_epochs = config.get('epoch', LPU.models.nnPU.nnPU.DEFAULT_CONFIG.get('epoch', None) if USE_DEFAULT_CONFIG else None)
 
     all_scores_dict = {split: {'epochs': []} for split in dataloaders_dict.keys()}
     scores_dict = {split: {} for split in dataloaders_dict.keys()}
@@ -149,9 +149,5 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
 if __name__ == "__main__":
     yaml_file_path = '/Users/naji/phd_codebase/LPU/configs/nnPU_config.yaml'
     config = LPU.utils.utils_general.load_and_process_config(yaml_file_path)
-    # args = types.SimpleNamespace(**config)
-    # with unittest.mock.patch('LPU.external_libs.nnPUSB.args.device', return_value=args.device):
-    #     import LPU.external_libs.nnPUSB.train
-    #     import LPU.external_libs.nnPUSB.model
     results, best_epoch = train_model()
     LPU.utils.plot_utils.plot_scores(results, best_epoch=best_epoch, loss_type='overall_loss')

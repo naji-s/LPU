@@ -92,8 +92,6 @@ class nnPUloss(nn.Module):
         self.unlabeled = -1
 
     def forward(self, x, t):
-        if torch.min(t) == 0:
-            t = 2*t - 1
         t = t[:, None]
         # positive: if positive,1 else 0
         # unlabeled: if unlabeled,1 else 0

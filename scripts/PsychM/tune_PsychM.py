@@ -16,7 +16,7 @@ import LPU.utils.dataset_utils
 import LPU.utils.utils_general
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
-MODEL_NAME = 'psychm'
+MODEL_NAME = 'PsychM'
 
 def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
     # setting the seed for the tuning
@@ -30,7 +30,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         # since we potentially might want to set the seed for the tuning
 		"random_state": ray.tune.randint(0, 1000),
         "inducing_points_size": ray.tune.choice([64]),
-        "learning_rate": .01,
+        "learning_rate": 0.01, 
         "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "intrinsic_kernel_params": {
             "normed": ray.tune.choice([False]),
@@ -73,7 +73,6 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
             "holdout": 64
         }
     }
-    breakpoint()
     reporter = ray.tune.CLIReporter(metric_columns=[
         "val_overall_loss", "val_y_auc", "val_y_accuracy", "val_y_APS",
         "test_overall_loss", "test_y_auc", "test_y_accuracy", "test_y_APS"])
@@ -94,7 +93,6 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         metric='val_overall_loss',
         mode='min',
         scheduler=scheduler,
-        fail_fast=False,
         storage_path=results_dir,
         progress_reporter=reporter,
         keep_checkpoints_num=1)

@@ -78,12 +78,13 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
         all_scores_dict['val']['epochs'].append(epoch)
         scheduler.step(scores_dict['val']['overall_loss'])
 
+        # Update best validation loss and epoch
         for split in ['train', 'val']:
             for score_type, score_value in scores_dict[split].items():
                 if score_type not in all_scores_dict[split]:
                     all_scores_dict[split][score_type] = []
                 all_scores_dict[split][score_type].append(score_value)
-
+                
         if scores_dict['val']['overall_loss'] < best_val_loss:
             best_val_loss = scores_dict['val']['overall_loss']
             best_epoch = epoch
@@ -120,6 +121,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
     model = PsychM_model
     model.load_state_dict(best_model_state)
 
+    # Flatten scores_dict
     flattened_scores = LPU.utils.utils_general.flatten_dict(best_scores_dict)
     filtered_scores_dict = {}
     for key, value in flattened_scores.items():
@@ -127,6 +129,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
             if 'epochs' not in key:
                 filtered_scores_dict[key] = value
 
+    # Report metrics if executed under Ray Tune
     if with_ray:
         if RAY_AVAILABLE and (ray.util.client.ray.is_connected() or ray.is_initialized()):
             ray.train.report(filtered_scores_dict)

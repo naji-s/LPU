@@ -5,10 +5,6 @@ pytorch models in this library. That is a future TODO (naji)
 """
 
 import logging
-import sys
-
-import LPU.external_libs.nnPUlearning
-# sys.path.append('LPU/external_libs/nnPUSB')
 
 import numpy as np
 import torch

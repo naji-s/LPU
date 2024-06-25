@@ -33,7 +33,6 @@ DEFAULT_CONFIG = {
     "device": "cpu",
     "dataset_name": "animal_no_animal",  # could also be fashionMNIST
     "dataset_kind": "LPU",
-    "gpu": 9,
     "val_iterations": 30,
     "num_labeled": 3000,
     "learning_rate": 0.0001,
@@ -45,15 +44,15 @@ DEFAULT_CONFIG = {
         # *** NOTE ***
         # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
         # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
-        "test": 0.4,
-        "val": 0.1,
-        "holdout": 0.0,
-        "train": 0.5
+        'test': 0.4,
+        'val': 0.2,
+        'holdout': .0,
+        'train': .4, 
     },
     "batch_size": {
         "train": 64,
         "test": 64,
-        "val": 64,
+        "val": 16,
         "holdout": 64
     }
 }
@@ -282,7 +281,7 @@ class vPU(LPU.models.lpu_model_base.LPUModelBase):
                 y_all_vall = y_val
                 val_l_vals_all = np.concatenate([np.ones(len(val_data_p)), np.zeros(len(val_data_u))])
             else:
-                val_log_phi_all = torch.cat(val_log_phi_all, val_log_phi)
+                val_log_phi_all = torch.cat((val_log_phi_all, val_log_phi))
                 y_all_vall = torch.cat((y_all_vall, y_val))
                 val_l_vals_all = np.concatenate([val_l_vals_all, np.concatenate([np.ones(len(val_data_p)), np.zeros(len(val_data_u))])])
 

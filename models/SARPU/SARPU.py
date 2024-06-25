@@ -106,7 +106,7 @@ class LogisticRegressionPU(LogisticRegression, BasePU):
             super().fit(x,s,sample_weight)
         else:
             Xp,Yp,Wp = self._make_propensity_weighted_data(x,s,e,sample_weight)
-            super().fit(Xp,Yp,Wp)
+            super().fit(X=Xp,y=Yp,sample_weight=Wp)
             
         
 
@@ -158,29 +158,29 @@ class SARPU(LPU.models.lpu_model_base.LPUModelBase):
             l.append(l_batch.numpy())
             y.append(y_batch.numpy())
         # concatenate the data
-        X_batch_concat = np.concatenate(X)
-        l_batch_concat = np.concatenate(l)
-        y_batch_concat = np.concatenate(y)
+        X = np.concatenate(X)
+        l = np.concatenate(l)
+        y = np.concatenate(y)
 
         # find out the binary type of the data
         binary_kind = set(np.unique(y))
 
-        propensity_attributes = np.ones(X_batch_concat.shape[-1]).astype(int)
+        propensity_attributes = np.ones(X.shape[-1]).astype(int)
         self.classification_model, self.propensity_model, self.results = LPU.external_libs.SAR_PU.sarpu.sarpu.pu_learning.pu_learn_sar_em(
-            X_batch_concat, l_batch_concat, classification_model=self.classification_model, propensity_attributes=propensity_attributes, max_its=self.max_iter)
+            X, l, classification_model=self.classification_model, propensity_attributes=propensity_attributes, max_its=self.max_iter)
 
-        y_batch_concat_prob = self.predict_prob_y_given_X(X=X_batch_concat)
-        l_batch_concat_prob = self.predict_proba(X=X_batch_concat)
-        y_batch_concat_est = self.predict_y_given_X(X=X_batch_concat)
-        l_batch_concat_est = self.predict(X=X_batch_concat)
+        y_prob = self.predict_prob_y_given_X(X=X)
+        l_prob = self.predict_proba(X=X)
+        y_est = self.predict_y_given_X(X=X)
+        l_est = self.predict(X=X)
         
         # _calculate_validation_metrics assumes that the data is in {0, 1},
         # so we need to convert the data to {0, 1} if it is in {-1, 1}
         if binary_kind == {-1, 1}:
-            l_batch_concat = (l_batch_concat + 1) // 2
-            y_batch_concat = (y_batch_concat + 1) // 2
+            l = (l + 1) // 2
+            y = (y + 1) // 2
         scores_dict = self._calculate_validation_metrics(
-            y_batch_concat_prob, y_batch_concat, l_batch_concat_prob, l_batch_concat, l_ests=l_batch_concat_est, y_ests=y_batch_concat_est
+            y_prob, y, l_prob, l, l_ests=l_est, y_ests=y_est
         )
 
         
@@ -201,12 +201,12 @@ class SARPU(LPU.models.lpu_model_base.LPUModelBase):
     def validate(self, dataloader, loss_fn=None):
         scores_dict = {}
         total_loss = 0.
-        l_batch_concat = []
-        y_batch_concat = []
-        y_batch_concat_prob = []
-        l_batch_concat_prob = []
-        l_batch_concat_est = []
-        y_batch_concat_est = []
+        l = []
+        y = []
+        y_prob = []
+        l_prob = []
+        l_est = []
+        y_est = []
         binary_kind = set(np.unique(dataloader.dataset.y))
         for batch_num, (X_batch, l_batch, y_batch, _) in enumerate(dataloader):
             loss = loss_fn(X_batch, l_batch)
@@ -219,26 +219,26 @@ class SARPU(LPU.models.lpu_model_base.LPUModelBase):
 
             total_loss += loss.item()
 
-            l_batch_concat.append(l_batch)
-            y_batch_concat.append(y_batch)
-            y_batch_concat_prob.append(y_batch_prob)
-            l_batch_concat_prob.append(l_batch_prob)
-            y_batch_concat_est.append(y_batch_est)
-            l_batch_concat_est.append(l_batch_est)   
+            l.append(l_batch)
+            y.append(y_batch)
+            y_prob.append(y_batch_prob)
+            l_prob.append(l_batch_prob)
+            y_est.append(y_batch_est)
+            l_est.append(l_batch_est)   
 
-        y_batch_concat_prob = np.concatenate(y_batch_concat_prob)
-        l_batch_concat_prob = np.concatenate(l_batch_concat_prob)
-        y_batch_concat_est = np.concatenate(y_batch_concat_est)
-        l_batch_concat_est = np.concatenate(l_batch_concat_est)
-        y_batch_concat = np.concatenate(y_batch_concat)
-        l_batch_concat = np.concatenate(l_batch_concat)
+        y_prob = np.concatenate(y_prob)
+        l_prob = np.concatenate(l_prob)
+        y_est = np.concatenate(y_est)
+        l_est = np.concatenate(l_est)
+        y = np.concatenate(y)
+        l = np.concatenate(l)
 
         if binary_kind == {-1, 1}:
-            y_batch_concat = (y_batch_concat + 1) / 2
-            l_batch_concat = (l_batch_concat + 1) / 2
+            y = (y + 1) / 2
+            l = (l + 1) / 2
 
         scores_dict = self._calculate_validation_metrics(
-            y_batch_concat_prob, y_batch_concat, l_batch_concat_prob, l_batch_concat, l_ests=l_batch_concat_est, y_ests=y_batch_concat_est
+            y_prob, y, l_prob, l, l_ests=l_est, y_ests=y_est
         )
 
         # for score_type in scores_dict:

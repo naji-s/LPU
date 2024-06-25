@@ -26,7 +26,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
     search_space = {
         # making sure the model training is not gonna set the seed 
         # since we potentially might want to set the seed for the tuning
-		"random_state": None,
+		"random_state": ray.tune.randint(0, 1000),
         "inducing_points_size": ray.tune.choice([64]),
         "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         'learning_rate': .01,

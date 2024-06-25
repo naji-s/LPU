@@ -219,7 +219,7 @@ def LPUD_to_MPED(lpu_dataset, indices, data_generating_process='CC'):
     }
     return dataset_dict, indices_dict
 
-def create_dataloaders_dict(config, target_transform=None, label_transform=None,  transform=None):
+def create_dataloaders_dict(config, target_transform=None, label_transform=None,  transform=None, drop_last=False):
     dataloders_dict = {}
     samplers_dict = {}
     dataset_dict = {}
@@ -279,12 +279,12 @@ def create_dataloaders_dict(config, target_transform=None, label_transform=None,
         if dataset_dict[split]:
             datas_dict = {'X': dataset_dict[split][0], 'l': dataset_dict[split][1], 'y': dataset_dict[split][2]}
             split_dataset = LPU.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict=datas_dict, transform=transform, target_transform=target_transform, label_transform=label_transform)
-            samplers_dict[split], dataloaders_dict[split] = make_data_loader(dataset=split_dataset, batch_size=config['batch_size'][split])
+            samplers_dict[split], dataloaders_dict[split] = make_data_loader(dataset=split_dataset, batch_size=config['batch_size'][split], drop_last=drop_last)
         else:
             # *** DO NOT DELETE *** for the normal case where we have a LPU dataset
             X, l, y, _ = lpu_dataset[split_indices_dict[split]]
             dataset_dict[split] = LPU.datasets.LPUDataset.LPUDataset(device=config['device'], data_dict={'X': X, 'l': l, 'y': y}, transform=transform, target_transform=target_transform, label_transform=label_transform)
-            samplers_dict[split], dataloaders_dict[split] = make_data_loader(dataset=dataset_dict[split], batch_size=config['batch_size'][split])
+            samplers_dict[split], dataloaders_dict[split] = make_data_loader(dataset=dataset_dict[split], batch_size=config['batch_size'][split], drop_last=drop_last)
     return dataloaders_dict
 
 

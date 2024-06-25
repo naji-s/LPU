@@ -2,18 +2,23 @@ import json
 import os
 import datetime
 import time
+import tempfile
 
+import numpy as np
 import ray.train
 import ray.tune
 import ray.tune.schedulers
+import torch
 
 import LPU.scripts
-import LPU.scripts.sarpu
-import LPU.scripts.sarpu.run_sarpu_em
+import LPU.scripts.SARPU
+import LPU.scripts.SARPU.run_SARPU
+import LPU.models.SARPU.SARPU
+import LPU.utils.dataset_utils
 import LPU.utils.utils_general
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
-MODEL_NAME = 'sarpu'
+MODEL_NAME = 'SARPU'
 
 def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
     # setting the seed for the tuning
@@ -31,7 +36,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         "svm_params": {
             "tol": ray.tune.loguniform(1e-5, 1e-3),
             "C": ray.tune.loguniform(0.1, 10),
-            "kernel": ray.tune.choice(['linear', 'poly', 'rbf', 'sigmoid']),
+            "kernel": ray.tune.choice(['linear', 'rbf']),
             "degree": ray.tune.randint(2, 5),
             "gamma": ray.tune.loguniform(1e-4, 1),
             "max_iter": ray.tune.choice([-1, 1000, 2000, 5000]),
@@ -42,7 +47,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
             "C": ray.tune.loguniform(0.1, 10),
             "fit_intercept": ray.tune.choice([True, False]),
             "solver": ray.tune.choice(['lbfgs']),
-            "max_iter": ray.tune.choice([-1, 1000, 2000, 5000]),
+            "max_iter": ray.tune.choice([1000, 2000, 5000]),
         },
         "batch_size": {
             "train": ray.tune.choice([64]),
@@ -50,6 +55,28 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
             "val": ray.tune.choice([64]),
             "holdout": ray.tune.choice([64])
         },
+    }
+    data_config = {
+        "dataset_name": "animal_no_animal",  # fashionMNIST
+        "dataset_kind": "LPU",
+        "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
+        "device": "cpu",
+        'ratios':
+        {
+            # *** NOTE ***
+            # TRAIN_RATIO == 1. - HOLDOUT_RATIO - TEST_RATIO - VAL_RATIO
+            # i.e. test_ratio + val_ratio + holdout_ratio + train_ratio == 1
+            'test': 0.4,
+            'val': 0.05,
+            'holdout': .05,
+            'train': .5,
+        },
+        "batch_size": {
+            "train": 64,
+            "test": 64,
+            "val": 64,
+            "holdout": 64
+        }
     }
 
     reporter = ray.tune.CLIReporter(metric_columns=[
@@ -61,8 +88,10 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         reduction_factor=2)
 
     execution_start_time = time.time()
+    dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(data_config)
+
     result = ray.tune.run(
-        LPU.scripts.sarpu.run_sarpu_em.train_model,
+        ray.tune.with_parameters(LPU.scripts.SARPU.run_SARPU.train_model, dataloaders_dict=dataloaders_dict, with_ray=True),
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,
@@ -71,20 +100,55 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         mode='min',
         storage_path=results_dir,
         progress_reporter=reporter,
+        keep_checkpoints_num=1
         )
 
     execution_time = time.time() - execution_start_time
     LOG.info(f"Execution time: {execution_time} seconds")
     best_trial = result.get_best_trial("val_overall_loss", "min", "last")
+
+    best_model_checkpoint = torch.load(os.path.join(best_trial.checkpoint.path, "checkpoint.pt"))
+    best_model = LPU.models.SARPU.SARPU.SARPU(best_model_checkpoint["config"], 
+                                              training_size=len(dataloaders_dict['train'].dataset))
+    best_model.load_state_dict(best_model_checkpoint["model_state"])
+    
+    # since SARPU uses sklearn for the propensity & classification model, 
+    # we need to retrain the model on the whole training set, as the weights
+    # are not stored in the state of the our wrapper model around SARPU training
+    # algorithm from its original repo
+    dataloader = dataloaders_dict['train']    
+    X = []
+    l = []
+    y = []
+    # put all the data in one list
+    for data in dataloader:
+        X_batch, l_batch, y_batch, _ = data
+        X.append(X_batch.numpy())
+        l.append(l_batch.numpy())
+        y.append(y_batch.numpy())
+    # concatenate the data
+    X = np.concatenate(X)
+    l = np.concatenate(l)
+    y = np.concatenate(y)
+            
+    propensity_attributes = np.ones(X.shape[-1]).astype(int)
+    best_model.classification_model, best_model.propensity_model, best_model.results = LPU.external_libs.SAR_PU.sarpu.sarpu.pu_learning.pu_learn_sar_em(
+            X, l, classification_model=best_model.classification_model, propensity_attributes=propensity_attributes, max_its=best_model.max_iter)
+    
+    best_model_test_results = best_model.validate(dataloaders_dict['test'], loss_fn=best_model.loss_fn)
+    final_results = best_trial.last_result.copy()
+    for key in best_trial.last_result:
+        if 'val_' in key:
+            final_results[key.replace('val', 'test')] = best_model_test_results['_'.join(key.split('_')[1:])]
     best_trial_report = {
     "Best trial config": best_trial.config,
-    "Best trial final validation loss": best_trial.last_result["val_overall_loss"],
+    "Best trial final validation loss": final_results["val_overall_loss"],
     "Best trial final test scores": {
-        "test_overall_loss": best_trial.last_result["test_overall_loss"],
-        "test_y_auc": best_trial.last_result["test_y_auc"],
-        "test_y_accuracy": best_trial.last_result["test_y_accuracy"],
-        "test_y_APS": best_trial.last_result["test_y_APS"]},
-    "Execution time": execution_time,
+        "test_overall_loss": final_results["test_overall_loss"],
+        "test_y_auc": final_results["test_y_auc"],
+        "test_y_accuracy": final_results["test_y_accuracy"],
+        "test_y_APS": final_results["test_y_APS"]},
+    "Execution Time": execution_time,
     }
     # Storing results in a JSON file
     EXPERIMENT_DATETIME = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
