@@ -86,6 +86,7 @@ class TIcE(LPU.models.geometric.Elkan.Elkan.Elkan):
         folds = np.array(map(lambda l: int(l.strip()), open(self.config['folds']).readlines())) if self.config['folds'] else np.random.randint(5, size=len(X_holdout))
         l_holdout_bitarray = bitarray.bitarray(list(l_holdout.astype(int)))
         (c_estimate, c_its_estimates) = LPU.external_libs.SAR_PU.lib.tice.tice.tice.tice(X_holdout, l_holdout_bitarray, self.config['max-bepp'], folds, self.config['delta'], nbIterations=self.config['nbIts'], maxSplits=self.config['maxSplits'], useMostPromisingOnly=self.config['promis'], minT=self.config['minT'])
+        # making sure c_estimate is not too small
         c_estimate = max(c_estimate, LPU.constants.EPSILON)
         with torch.no_grad():
             self.C.fill_(c_estimate)
