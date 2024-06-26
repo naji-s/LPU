@@ -73,26 +73,26 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
         # due to division by zero
         TIcE_model.C.fill_(0.5)
     for epoch in range(num_epochs):
-        scores_dict['train'] = TIcE_model.train_one_epoch(optimizer=optimizer, dataloader=dataloaders_dict['train'],
-                                                     holdout_dataloader=dataloaders_dict['holdout'])
+        scores_dict['train'] = TIcE_model.train_one_epoch(optimizer=optimizer, dataloader=dataloaders_dict['train'], 
+                                                          holdout_dataloader=dataloaders_dict['holdout'])
         all_scores_dict['train']['epochs'].append(epoch)
 
         scores_dict['val'] = TIcE_model.validate(dataloaders_dict['val'], loss_fn=TIcE_model.loss_fn, model=TIcE_model.gp_model)
         all_scores_dict['val']['epochs'].append(epoch)
-        scheduler.step(scores_dict['val']['overall_loss'])
-
         # Update best validation loss and epoch
-        for split in ['train', 'val']:
-            for score_type, score_value in scores_dict[split].items():
-                if score_type not in all_scores_dict[split]:
-                    all_scores_dict[split][score_type] = []
-                all_scores_dict[split][score_type].append(score_value)
-                
         if scores_dict['val']['overall_loss'] < best_val_loss:
             best_val_loss = scores_dict['val']['overall_loss']
             best_epoch = epoch
             best_scores_dict = copy.deepcopy(scores_dict)
             best_model_state = copy.deepcopy(TIcE_model.state_dict())
+
+        scheduler.step(scores_dict['val']['overall_loss'])
+        for split in ['train', 'val']:
+            for score_type, score_value in scores_dict[split].items():
+                if score_type not in all_scores_dict[split]:
+                    all_scores_dict[split][score_type] = []
+                all_scores_dict[split][score_type].append(score_value)
+
 
         LOG.info(f"Epoch {epoch}: {json.dumps(scores_dict, indent=2)}")
         current_lr = optimizer.param_groups[0]['lr']
@@ -108,13 +108,14 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
                     os.path.join(tempdir, "checkpoint.pt"),
                 )
                 ray.train.report(metrics={
-                    'val_overall_loss': scores_dict['val']['overall_loss'],
-                    'val_y_auc': scores_dict['val']['y_auc'],
-                    'val_y_accuracy': scores_dict['val']['y_accuracy'],
-                    'val_y_APS': scores_dict['val']['y_APS'],
-                    'epoch': epoch,
-                    'learning_rate': current_lr}, checkpoint=ray.train.Checkpoint.from_directory(tempdir))
-
+                        'val_overall_loss': scores_dict['val']['overall_loss'],
+                        'val_y_auc': scores_dict['val']['y_auc'],
+                        'val_y_accuracy': scores_dict['val']['y_accuracy'],
+                        'val_y_APS': scores_dict['val']['y_APS'],
+                        'epoch': epoch,
+                        'learning_rate': current_lr}, checkpoint=ray.train.Checkpoint.from_directory(tempdir))
+                
+        # Stop if the learning rate is too low
         if current_lr <= config['stop_learning_lr']:
             print("Learning rate below threshold, stopping training.")
             break

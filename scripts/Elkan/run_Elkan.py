@@ -1,5 +1,5 @@
 import copy
-import logging
+import json
 import tempfile
 import os
 
@@ -28,7 +28,6 @@ except ImportError:
     RAY_AVAILABLE = False
 
 def train_model(config=None, dataloaders_dict=None, with_ray=False):
-
     if config is None:
         config = {}
     # Load the base configuration
@@ -44,39 +43,32 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
     inducing_points_size = config['inducing_points_size']
     if dataloaders_dict is None:
         dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(config)
-    # if inducing_points_initial_vals is None:
     inducing_points_initial_vals = LPU.utils.dataset_utils.initialize_inducing_points(
-    dataloaders_dict['train'], inducing_points_size)        
-    
-
+        dataloaders_dict['train'], inducing_points_size)
     elkan_model = LPU.models.geometric.Elkan.Elkan.Elkan(
         config,
         inducing_points_initial_vals=inducing_points_initial_vals,
-        training_size=len(dataloaders_dict['train'].dataset),
-        num_features=inducing_points_initial_vals.shape[-1]
+        training_size=len(dataloaders_dict['train'].dataset),        
     )
 
     learning_rate = config['learning_rate']
     num_epochs = config['num_epochs']
-    epoch_block = config['epoch_block']
     optimizer = torch.optim.Adam([{
         'params': elkan_model.parameters(),
         'lr': learning_rate
     }])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=5)
 
-    all_scores_dict = {split: {'epochs': []} for split in dataloaders_dict.keys()}
-
+    all_scores_dict = {split: {'epochs': []} for split in ['train', 'val']}
+    scores_dict = {split: {} for split in ['train', 'val']}
     best_val_loss = float('inf')
     best_epoch = -1
     best_scores_dict = None
     best_model_state = None
     elkan_model.set_C(dataloaders_dict['holdout'])
     for epoch in range(num_epochs):
-        scores_dict = {split: {} for split in dataloaders_dict.keys()}
-        scores_dict_item = elkan_model.train_one_epoch(optimizer=optimizer, dataloader=dataloaders_dict['train'],
+        scores_dict['train'] = elkan_model.train_one_epoch(optimizer=optimizer, dataloader=dataloaders_dict['train'],
                                                        holdout_dataloader=dataloaders_dict['holdout'])
-        scores_dict['train'].update(scores_dict_item)
         all_scores_dict['train']['epochs'].append(epoch)
 
         scores_dict['val'] = elkan_model.validate(dataloaders_dict['val'], model=elkan_model.gp_model, loss_fn=elkan_model.loss_fn)
@@ -89,8 +81,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
             best_model_state = copy.deepcopy(elkan_model.state_dict())
 
         scheduler.step(scores_dict['val']['overall_loss'])
-            
-        for split in dataloaders_dict.keys():
+        for split in ['train', 'val']:
             for score_type, score_value in scores_dict[split].items():
                 if score_type not in all_scores_dict[split]:
                     all_scores_dict[split][score_type] = []
@@ -98,7 +89,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
 
 
         elkan_model.set_C(dataloaders_dict['holdout'])
-        LOG.info(f"Epoch {epoch}: {scores_dict}")
+        LOG.info(f"Epoch {epoch}: {json.dumps(scores_dict, indent=2)}")
         # Check current learning rate
         current_lr = optimizer.param_groups[0]['lr']
         LOG.info(f"Current learning rate: {current_lr}")
@@ -119,7 +110,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
                         'val_y_APS': scores_dict['val']['y_APS'],
                         'epoch': epoch,
                         'learning_rate': current_lr}, checkpoint=ray.train.Checkpoint.from_directory(tempdir))
-        
+                
         # Stop if the learning rate is too low
         if current_lr <= config['stop_learning_lr']:
             print("Learning rate below threshold, stopping training.")

@@ -2,15 +2,12 @@ import json
 import os
 import datetime
 import time
-import tempfile
 
 import ray.train
 import ray.tune
 import ray.tune.schedulers
 import torch
 
-import LPU.scripts
-import LPU.scripts.TIcE
 import LPU.scripts.TIcE.run_TIcE
 import LPU.models.TIcE.TIcE
 import LPU.utils.dataset_utils
@@ -24,15 +21,14 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
     if random_state is not None:
         LPU.utils.utils_general.set_seed(random_state)
 
-
     # Configuration for hyperparameters to be tuned
     search_space = {
         # making sure the model training is not gonna set the seed 
         # since we potentially might want to set the seed for the tuning
 		"random_state": ray.tune.randint(0, 1000),
         "inducing_points_size": ray.tune.choice([64]),
-        "learning_rate": 0.01, 
         "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
+        "learning_rate": 0.01,
         "max-bepp": ray.tune.randint(1, 10),
         "maxSplits": ray.tune.randint(100, 1000),
         "minT": ray.tune.randint(1, 10),
@@ -53,7 +49,6 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         #     "val": ray.tune.choice([64]),
         #     "holdout": ray.tune.choice([64])
         # },
-        
     }
     data_config = {
         "dataset_name": "animal_no_animal",  # fashionMNIST
@@ -96,20 +91,19 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         config=search_space,
         num_samples=num_samples,
         metric='val_overall_loss',
-        mode='min',
         scheduler=scheduler,
+        mode='min',
         storage_path=results_dir,
         progress_reporter=reporter,
-        keep_checkpoints_num=1)
+        keep_checkpoints_num=1
+        )
     execution_time = time.time() - execution_start_time
     LOG.info(f"Execution time: {execution_time} seconds")
-
     best_trial = result.get_best_trial("val_overall_loss", "min", "last")
     best_model_checkpoint = torch.load(os.path.join(best_trial.checkpoint.path, "checkpoint.pt"))
     best_model = LPU.models.TIcE.TIcE.TIcE(config=best_model_checkpoint["config"],
                                            inducing_points_initial_vals=best_model_checkpoint["model_state"]["inducing_points"],
                                            training_size=len(dataloaders_dict['train'].dataset))
-
     best_model.load_state_dict(best_model_checkpoint["model_state"])
 
     best_model_test_results = best_model.validate(dataloaders_dict['test'], loss_fn=best_model.loss_fn, model=best_model.gp_model)

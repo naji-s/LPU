@@ -11,39 +11,48 @@ import LPU.models.geometric.Elkan.Elkan
 
 LOG = logging.getLogger(__name__)
 
-EPSILON = 1e-16
-
 DEFAULT_CONFIG = {
     # for VGP:
+    "random_state": 554,
     "inducing_points_size": 32,
     "learning_rate": 0.01,
     "num_epochs": 50,
-    "stop_learning_lr": 1e-6,    
+    "stop_learning_lr": 1e-6,
     "device": "cpu",
-    "set_C_every_epoch": False,
-    "epoch_block": 1, # Perform validation every EPOCH_BLOCK iterations
-    "kernel_mode": 2,
     "intrinsic_kernel_params": {
+        # "normed": False,
+        # "kernel_type": "laplacian",
+        # "heat_temp": 0.01,
+        # "noise_factor": 0.0,
+        # "amplitude": 0.,
+        # "n_neighbor": 5,
+        # "lengthscale": 0.3,
+        # "neighbor_mode": "distance",
+        # "power_factor": 1,
+        "invert_M_first": False,
+        
         "normed": False,
         "kernel_type": "laplacian",
-        "heat_temp": 0.01,
-        "noise_factor": 0.0,
-        "amplitude": 0.,
+        "noise_factor": 0.0678138720259434,
+        "amplitude": 0.12023527271263154,
         "n_neighbor": 5,
-        "lengthscale": 0.3,
-        "neighbor_mode": "distance",
-        "power_factor": 1,
-        "invert_M_first": False,
+        "lengthscale": 8.725214019150634,
+        "neighbor_mode": "connectivity",
+        "power_factor": 1.9281582357231326,        
         },
+    "max-bepp": 4,
+    "maxSplits": 284,
+    "minT": 9,
+    "nbIts": 9,
     "out": None,
     "folds": None,
     "delta": None,
-    "max-bepp": 5,
-    "maxSplits": 500,
+    # "max-bepp": 5,
+    # "maxSplits": 500,
     "promis": False,
     "delimiter": ',',
-    "minT": 10,
-    "nbIts": 2,
+    # "minT": 10,
+    # "nbIts": 2,
     "dataset_name": "animal_no_animal",  # fashionMNIST
     "dataset_kind": "LPU",
     "data_generating_process": "SB",  # either of CC (case-control) or SB (selection-bias)
@@ -71,8 +80,6 @@ class TIcE(LPU.models.geometric.Elkan.Elkan.Elkan):
     """
     def __init__(self, config, *args, **kwargs):
         self.config = config
-        self.kernel_mode = config.get('kernel_mode', 1)
-        LOG.info(f"kernel_mode: {self.kernel_mode}")
         super().__init__(config=self.config, **kwargs)
 
     def set_C(self, holdout_dataloader):        

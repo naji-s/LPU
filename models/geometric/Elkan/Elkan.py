@@ -14,30 +14,39 @@ import torch
 
 
 import LPU.constants
-torch.set_default_dtype(LPU.constants.DTYPE)
 import LPU.models
 import LPU.models.lpu_model_base
 import LPU.models.geometric.GVGP
 import LPU.models.geometric.PsychM.PsychM
+LOG = logging.getLogger(__name__)
 
 DEFAULT_CONFIG = {
     # for VGP:
+    "random_state": 554,
     "inducing_points_size": 32,
     "learning_rate": 0.01,
-    "num_epochs": 10,
+    "num_epochs": 50,
     "stop_learning_lr": 1e-6,
     "device": "cpu",
-    "epoch_block": 1,
     "intrinsic_kernel_params": {
         "normed": False,
         "kernel_type": "laplacian",
-        "heat_temp": 0.01,
-        "noise_factor": 0.0,
-        "amplitude": 0.5,
+        "noise_factor": 0.0678138720259434,
+        "amplitude": 0.12023527271263154,
         "n_neighbor": 5,
-        "lengthscale": 0.3,
-        "neighbor_mode": "distance",
-        "power_factor": 1,
+        "lengthscale": 8.725214019150634,
+        "neighbor_mode": "connectivity",
+        "power_factor": 1.9281582357231326,        
+        
+        # "normed": False,
+        # "kernel_type": "laplacian",
+        # "heat_temp": 0.01,
+        # "noise_factor": 0.0,
+        # "amplitude": 0.5,
+        # "n_neighbor": 5,
+        # "lengthscale": 0.3,
+        # "neighbor_mode": "distance",
+        # "power_factor": 1,
         "invert_M_first": False,
     },
     "dataset_name": "animal_no_animal",  # fashionMNIST
@@ -51,7 +60,7 @@ DEFAULT_CONFIG = {
         'test': 0.4,
         'val': 0.05,
         'holdout': .05,
-        'train': .50, 
+        'train': .5, 
     },
 
     "batch_size": {
@@ -63,8 +72,6 @@ DEFAULT_CONFIG = {
 }
 
 
-EPOCH_BLOCKS = 1
-DEVICE = 'cpu'
 
 class Elkan(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
     class CustomLikelihood(gpytorch.likelihoods.Likelihood):
