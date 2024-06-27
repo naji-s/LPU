@@ -79,6 +79,12 @@ def main(config=None, num_samples=100, max_num_epochs=200, gpus_per_trial=0, res
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(data_config, target_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one,
                                                                        label_transform=LPU.utils.dataset_utils.one_zero_to_minus_one_one)
 
+    experiment_name = f'train_{MODEL_NAME}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
+    EXPERIMENT_DATETIME = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    json_save_dir = os.path.join(results_dir, MODEL_NAME, EXPERIMENT_DATETIME)
+    # Ensure the directory exists
+    os.makedirs(json_save_dir, exist_ok=True)
+
     result = ray.tune.run(
         ray.tune.with_parameters(LPU.scripts.nnPU.run_nnPU.train_model, dataloaders_dict=dataloaders_dict, with_ray=True),
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
@@ -90,7 +96,8 @@ def main(config=None, num_samples=100, max_num_epochs=200, gpus_per_trial=0, res
         storage_path=results_dir,
         progress_reporter=reporter,
         keep_checkpoints_num=1,
-        callbacks=[LPU.utils.ray_utils.PlotMetricsCallback(allow_list=['time_this_iter_s', 'learning_rate', 'val_overall_loss', 'val_y_APS', 'val_y_accuracy', 'val_y_auc'])],
+        name=experiment_name,
+        callbacks=[LPU.utils.ray_utils.PlotMetricsCallback(allow_list=['time_this_iter_s', 'learning_rate', 'val_overall_loss', 'val_y_APS', 'val_y_accuracy', 'val_y_auc'], json_save_dir=json_save_dir)],
         )
     execution_time = time.time() - execution_start_time
     LOG.info(f"Execution time: {execution_time} seconds")
@@ -124,12 +131,7 @@ def main(config=None, num_samples=100, max_num_epochs=200, gpus_per_trial=0, res
         "Execution Time": execution_time,
         "Final epoch": final_epoch,
     }
-    # Storing results in a JSON file
-    EXPERIMENT_DATETIME = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    json_save_dir = os.path.join(results_dir, MODEL_NAME, EXPERIMENT_DATETIME)
 
-    # Ensure the directory exists
-    os.makedirs(json_save_dir, exist_ok=True)
     json_save_path = os.path.join(json_save_dir, "best_trial_results.json")
     
     with open(json_save_path, "w") as json_file:

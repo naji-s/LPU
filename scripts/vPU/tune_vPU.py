@@ -73,6 +73,12 @@ def main(config=None, num_samples=100, max_num_epochs=200, gpus_per_trial=0, res
                 "holdout": False
             }
     }
+    experiment_name = f'train_{MODEL_NAME}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
+    EXPERIMENT_DATETIME = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    json_save_dir = os.path.join(results_dir, MODEL_NAME, EXPERIMENT_DATETIME)
+    # Ensure the directory exists
+    os.makedirs(json_save_dir, exist_ok=True)
+
     reporter = ray.tune.CLIReporter(metric_columns=[
         "val_overall_loss", "val_phi_loss", "val_reg_loss",
         "test_overall_loss", "test_phi_loss", "test_reg_loss"])
@@ -108,7 +114,8 @@ def main(config=None, num_samples=100, max_num_epochs=200, gpus_per_trial=0, res
     storage_path=results_dir,
     progress_reporter=reporter,
     keep_checkpoints_num=1,
-    callbacks=[LPU.utils.ray_utils.PlotMetricsCallback(allow_list=['time_this_iter_s', 'epoch', 'val_overall_loss', 'val_phi_loss', 'val_reg_loss', 'val_y_auc', 'val_y_accuracy', 'val_y_APS'])],
+    name=experiment_name,
+    callbacks=[LPU.utils.ray_utils.PlotMetricsCallback(allow_list=['time_this_iter_s', 'epoch', 'val_overall_loss', 'val_phi_loss', 'val_reg_loss', 'val_y_auc', 'val_y_accuracy', 'val_y_APS'], json_save_dir=json_save_dir)],
     )
     execution_time = time.time() - execution_start_time
     LOG.info(f"Execution time: {execution_time} seconds")
@@ -142,16 +149,6 @@ def main(config=None, num_samples=100, max_num_epochs=200, gpus_per_trial=0, res
     "Execution Time": execution_time,
     "Final epoch": final_epoch
     }    
-    # Storing results in a JSON file
-    EXPERIMENT_DATETIME = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    json_save_dir = os.path.join(results_dir, MODEL_NAME, EXPERIMENT_DATETIME)
-
-    # Ensure the directory exists
-    os.makedirs(json_save_dir, exist_ok=True)
-    json_save_path = os.path.join(json_save_dir, "best_trial_results.json")
-
-    with open(json_save_path, "w") as json_file:
-        json.dump(best_trial_report, json_file, indent=4, cls=LPU.utils.utils_general.CustomJSONEncoder)
 
     print(json.dumps(best_trial_report, indent=4, cls=LPU.utils.utils_general.CustomJSONEncoder))
     return best_trial_report
