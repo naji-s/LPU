@@ -29,7 +29,6 @@ import LPU.utils.manifold_utils
 
 DEFAULT_CONFIG = {
     "warm_start": True,
-    "random_state": 754,
     "inducing_points_size": 64,
     "learning_rate": 0.01,
     "num_epochs": 100,

@@ -20,7 +20,6 @@ import LPU.external_libs.DEDPUL.algorithms
 import LPU.external_libs.DEDPUL.NN_functions
 
 DEFAULT_CONFIG = {
-    'set_seed': True,
     'learning_rate': .01,
     'num_epochs': 10,
     'device': 'cpu',

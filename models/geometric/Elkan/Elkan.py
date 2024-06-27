@@ -22,7 +22,6 @@ LOG = logging.getLogger(__name__)
 
 DEFAULT_CONFIG = {
     # for VGP:
-    "random_state": 554,
     "inducing_points_size": 32,
     "learning_rate": 0.01,
     "num_epochs": 50,
