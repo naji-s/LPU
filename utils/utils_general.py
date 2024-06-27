@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import random
 
@@ -109,4 +110,28 @@ def tune_parse_args():
                         help="Directory to store the results.")
     parser.add_argument("--random_state", type=int, default=None,
                         help="Random state to set.")
+    parser.add_argument("--tune", action="store_true",
+                        help="Whether to tune the model.")
     return parser.parse_args()
+
+def inverse_softmax(softmax_outputs):
+    # Convert softmax outputs to a tensor if they are not already
+    if not isinstance(softmax_outputs, torch.Tensor):
+        softmax_outputs = torch.tensor(softmax_outputs)
+    
+    # Use the last element as the reference for division to calculate logits
+    ref = softmax_outputs[-1]
+    
+    # Compute the logits: log(x_i / x_ref) = log(x_i) - log(x_ref)
+    logits = torch.log(softmax_outputs) - torch.log(ref)
+    
+    return logits
+
+class CustomJSONEncoder(json.JSONEncoder):
+    """A customized JSON encoder that handles additional data types."""
+    def default(self, obj):
+        try:
+            output = super().default(obj)
+        except TypeError:
+            output = str(obj)
+        return output
