@@ -112,6 +112,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
                         'val_y_auc': scores_dict['val']['y_auc'],
                         'val_y_accuracy': scores_dict['val']['y_accuracy'],
                         'val_y_APS': scores_dict['val']['y_APS'],
+                        'C_estimate': TIcE_model.C.item(),
                         'epoch': epoch,
                         'learning_rate': current_lr}, checkpoint=ray.train.Checkpoint.from_directory(tempdir))
                 

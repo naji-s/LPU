@@ -16,86 +16,50 @@ import LPU.scripts.PsychM.run_PsychM
 import LPU.models.geometric.PsychM.PsychM
 import LPU.utils.dataset_utils
 import LPU.utils.utils_general
+import LPU.utils.ray_utils
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
 MODEL_NAME = 'PsychM'
 
-class MyCallback(ray.tune.Callback):
-    def __init__(self, allow_list=None):
-        self.fig = None
-        self.axs = None
-        self.metric_data = {}
-        self.initialized = False
-        self.trial_dir = None
-        if allow_list is None:
-            allow_list = ['time_this_iter_s', 'gamma', 'lambda', 
-                          'learning_rate', 'val_overall_loss', 'val_y_APS',
-                          'val_y_accuracy', 'val_y_auc']
-        self.allow_list = allow_list
+def SET_DEFAULT_SEARCH_SPACE():
+    default_search_space = {
+            # Configuration for hyperparameters to be tuned
+            # making sure the model training is not gonna set the seed 
+            # since we potentially might want to set the seed for the tuning
+            "random_state": ray.tune.randint(0, 1000),
+            "inducing_points_size": ray.tune.choice([32, 64]),
+            "learning_rate": ray.tune.loguniform(1e-4, 1e-2),
+            "num_epochs": ray.tune.choice(range(100, 100 + 1)),
+            "intrinsic_kernel_params": {
+                "normed": ray.tune.choice([False]),
+                "kernel_type": ray.tune.choice(["laplacian"]),
+                "noise_factor": ray.tune.uniform(1e-4, 1e-1),
+                "amplitude": ray.tune.loguniform(0.01, 100.0),
+                "n_neighbor": ray.tune.choice([5]),
+                "lengthscale": ray.tune.loguniform(0.01, 100.0),
+                "neighbor_mode": ray.tune.choice(["connectivity"]),
+                "power_factor": ray.tune.uniform(0.1, 2.0),
+            },
+            "batch_size": {
+                "train": ray.tune.choice([64]),
+                "test": ray.tune.choice([64]),
+                "val": ray.tune.choice([64]),
+                "holdout": ray.tune.choice([64])
+            },
+        }
+    return default_search_space
 
-    def on_trial_start(self, iteration, trials, trial, **info):
-        self.trial_dir = trial.local_path
-
-    def on_trial_result(self, iteration, trials, trial, result):
-        if not self.initialized:
-            self.fig, self.axs = plt.subplots(len(self.allow_list), 1, figsize=(8, 4 * len(self.allow_list)), sharex=True)
-            self.metric_data = {metric_name: [] for metric_name in result.keys() if metric_name in self.allow_list}
-            self.initialized = True
-
-        for metric_name, metric_value in result.items():
-            if metric_name in self.allow_list:
-                self.metric_data[metric_name].append(metric_value)
-
-        for i, (metric_name, metric_values) in enumerate(self.metric_data.items()):
-            self.axs[i].clear()
-            self.axs[i].plot(range(1, len(metric_values) + 1), metric_values, label=metric_name)
-            self.axs[i].set_xlabel('Epoch')
-            self.axs[i].set_ylabel(metric_name)
-            self.axs[i].legend()
-
-        self.fig.tight_layout()
-        self.fig.savefig(os.path.join(self.trial_dir, "progress.png"))
-
-    def on_trial_complete(self, iteration, trials, trial, **info):
-        if self.fig:
-            plt.close(self.fig)
-            self.fig = None
-            self.axs = None
-            self.metric_data = {}
-            self.initialized = False
-
-def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None, plot_results=True):
-    # setting the seed for the tuning
+def main(config=None, num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None, tune=False):
+        # setting the seed for the tuning
     if random_state is not None:
         LPU.utils.utils_general.set_seed(random_state)
-
-
-    # Configuration for hyperparameters to be tuned
-    search_space = {
-        # making sure the model training is not gonna set the seed 
-        # since we potentially might want to set the seed for the tuning
-		"random_state": ray.tune.randint(0, 1000),
-        "inducing_points_size": ray.tune.choice([32, 64]),
-        "learning_rate": ray.tune.loguniform(1e-4, 1e-2),
-        "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
-        "intrinsic_kernel_params": {
-            "normed": ray.tune.choice([False]),
-            "kernel_type": ray.tune.choice(["laplacian"]),
-            "noise_factor": ray.tune.uniform(1e-4, 1e-1),
-            "amplitude": ray.tune.loguniform(0.01, 100.0),
-            "n_neighbor": ray.tune.choice([5]),
-            "lengthscale": ray.tune.loguniform(0.01, 100.0),
-            "neighbor_mode": ray.tune.choice(["connectivity"]),
-            "power_factor": ray.tune.uniform(0.1, 2.0),
-        },
-        "batch_size": {
-            "train": ray.tune.choice([64]),
-            "test": ray.tune.choice([64]),
-            "val": ray.tune.choice([64]),
-            "holdout": ray.tune.choice([64])
-        },
-    }
-
+    DEFAULT_SEARCH_SPACE = SET_DEFAULT_SEARCH_SPACE()
+    if config is None:
+        config = {}
+    if tune:
+        config = LPU.utils.utils_general.deep_update(DEFAULT_SEARCH_SPACE, config)
+    else:
+        config = LPU.utils.utils_general.deep_update(LPU.models.geometric.PsychM.PsychM.DEFAULT_CONFIG, config)
 
     data_config = {
         "dataset_name": "animal_no_animal",  # fashionMNIST
@@ -132,9 +96,9 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(data_config)
 
     result = ray.tune.run(
-        ray.tune.with_parameters(LPU.scripts.PsychM.run_PsychM.train_model, dataloaders_dict=dataloaders_dict, with_ray=True, plot_results=plot_results),
+        ray.tune.with_parameters(LPU.scripts.PsychM.run_PsychM.train_model, dataloaders_dict=dataloaders_dict, with_ray=True),
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
-        config=search_space,
+        config=config,
         num_samples=num_samples,
         metric='val_overall_loss',
         mode='min',
@@ -142,7 +106,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         storage_path=results_dir,
         progress_reporter=reporter,
         keep_checkpoints_num=1,
-        callbacks=[MyCallback()]
+        callbacks=[LPU.utils.ray_utils.PlotMetricsCallback(allow_list=['time_this_iter_s', 'gamma', 'lambda', 'learning_rate', 'val_overall_loss', 'val_y_APS', 'val_y_accuracy', 'val_y_auc'])],
         )
     execution_time = time.time() - execution_start_time
     LOG.info(f"Execution time: {execution_time} seconds")
@@ -189,4 +153,6 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
 
 if __name__ == "__main__":
     args = LPU.utils.utils_general.tune_parse_args()
-    main(args.num_samples, args.max_num_epochs, args.gpus_per_trial, args.results_dir, args.random_state)
+    main(num_samples=args.num_samples, max_num_epochs=args.max_num_epochs, 
+         gpus_per_trial=args.gpus_per_trial, results_dir=args.results_dir,
+         random_state=args.random_state, tune=args.tune)

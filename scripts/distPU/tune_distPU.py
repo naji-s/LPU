@@ -4,6 +4,7 @@ import datetime
 import time
 import tempfile
 
+from matplotlib import pyplot as plt
 import ray.train
 import ray.tune
 import ray.tune.schedulers
@@ -16,29 +17,20 @@ import LPU.scripts.distPU.run_distPU
 import LPU.models.distPU
 import LPU.utils.dataset_utils
 import LPU.utils.utils_general
-
+import LPU.utils.ray_utils
 
 LOG = LPU.utils.utils_general.configure_logger(__name__)
 MODEL_NAME = 'distPU'
 
-def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
-    # setting the seed for the tuning
-    if random_state is not None:
-        LPU.utils.utils_general.set_seed(random_state)
-
-    search_space = {
-        # making sure the model training is not gonna set the seed 
-        # since we potentially might want to set the seed for the tuning
-		"random_state": ray.tune.randint(0, 1000),
+def SET_DEFAULT_SEARCH_SPACE():
+    default_search_space = {
+        "random_state": ray.tune.randint(0, 1000),
         "warm_up_lr": .01,
         "lr": .01,
-        # "warm_up_weight_decay": ray.tune.loguniform(1e-6, 1e-2),
-        # "weight_decay": ray.tune.loguniform(1e-6, 1e-2),        
-        "pu_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
+        "pu_epochs": ray.tune.choice(range(100, 100 + 1)),
         "warm_up_epochs": ray.tune.choice([10, 20, 50]),
         "co_entropy": ray.tune.uniform(0.001, 0.01),
         "optimizer": ray.tune.choice(['adam']),
-        # "schedular": ray.tune.choice(['cos-ann', 'step']),
         "entropy": ray.tune.uniform(0.1, 1.0),
         "co_mu": ray.tune.uniform(0.001, 0.01),
         "co_mix_entropy": ray.tune.uniform(0.01, 0.1),
@@ -50,6 +42,21 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
             "holdout": ray.tune.choice([64])
         },
     }
+    return default_search_space
+
+def main(config=None, num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None, tune=False):
+    # setting the seed for the tuning
+    if random_state is not None:
+        LPU.utils.utils_general.set_seed(random_state)
+
+    DEFAULT_SEARCH_SPACE = SET_DEFAULT_SEARCH_SPACE()
+    if config is None:
+        config = {}
+    if tune:
+        config = LPU.utils.utils_general.deep_update(DEFAULT_SEARCH_SPACE, config)
+    else:
+        config = LPU.utils.utils_general.deep_update(LPU.models.distPU.distPU.DEFAULT_CONFIG, config)
+
     data_config = {
         "dataset_name": "animal_no_animal",  # fashionMNIST
         "dataset_kind": "LPU",
@@ -86,14 +93,15 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
     result = ray.tune.run(
         ray.tune.with_parameters(LPU.scripts.distPU.run_distPU.train_model, dataloaders_dict=dataloaders_dict, with_ray=True),
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
-        config=search_space,
+        config=config,
         num_samples=num_samples,
         metric='val_overall_loss',
         scheduler=scheduler,
         mode='min',
         storage_path=results_dir,
         progress_reporter=reporter,
-        keep_checkpoints_num=1
+        keep_checkpoints_num=1,
+        callbacks=[LPU.utils.ray_utils.PlotMetricsCallback(allow_list=['time_this_iter_s', 'val_overall_loss', 'val_y_APS', 'val_y_accuracy', 'val_y_auc'])],
         )
     execution_time = time.time() - execution_start_time
     LOG.info(f"Execution time: {execution_time} seconds")
@@ -131,11 +139,15 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
     json_save_path = os.path.join(json_save_dir, "best_trial_results.json")
     
     with open(json_save_path, "w") as json_file:
-        json.dump(best_trial_report, json_file, indent=4)
+        json.dump(best_trial_report, json_file, indent=4, cls=LPU.utils.utils_general.CustomJSONEncoder)
 
-    print(json.dumps(best_trial_report, indent=4))
+    print(json.dumps(best_trial_report, indent=4, cls=LPU.utils.utils_general.CustomJSONEncoder))
     return best_trial_report
 
 if __name__ == "__main__":
     args = LPU.utils.utils_general.tune_parse_args()
-    main(args.num_samples, args.max_num_epochs, args.gpus_per_trial, args.results_dir, args.random_state)
+    main(num_samples=args.num_samples, max_num_epochs=args.max_num_epochs,
+         gpus_per_trial=args.gpus_per_trial, results_dir=args.results_dir,
+         random_state=args.random_state, tune=args.tune)
+    
+    

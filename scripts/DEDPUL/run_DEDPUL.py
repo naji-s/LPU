@@ -47,8 +47,8 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
 
     if 'random_state' in config and config['random_state'] is not None:
         random_state = config['random_state']
-    # setting the seed for the training
-    LPU.utils.utils_general.set_seed(random_state)
+        # setting the seed for the training
+        LPU.utils.utils_general.set_seed(random_state)
 
 
 

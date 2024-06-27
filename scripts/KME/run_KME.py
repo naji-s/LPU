@@ -109,6 +109,7 @@ def train_model(config=None, dataloaders_dict=None, with_ray=False):
                         'val_y_accuracy': scores_dict['val']['y_accuracy'],
                         'val_y_APS': scores_dict['val']['y_APS'],
                         'epoch': epoch,
+                        'C_estimate': KME_model.C.item(),
                         'learning_rate': current_lr}, checkpoint=ray.train.Checkpoint.from_directory(tempdir))
 
         # Stop if the learning rate is too low
