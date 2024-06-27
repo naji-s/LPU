@@ -100,6 +100,8 @@ def create_loss(config, prior=None):
     if prior is None:
         prior = CLASS_PRIOR[config['dataset_name']]
     print('prior: {}'.format(prior))
+    if hasattr(prior, 'detach'):
+        prior = prior.detach().cpu().numpy()
     if config['loss'] == 'Dist-PU':
         base_loss = LPU.external_libs.distPU.losses.distributionLoss.LabelDistributionLoss(prior=prior, device=config['device'])
     else:
@@ -214,4 +216,5 @@ class distPU(LPU.models.lpu_model_base.LPUModelBase):
         l_all = torch.cat(l_all)
         with torch.no_grad():
             self.C.fill_(l_all[y_all == 1].mean())    
-        self.prior = y_all.mean().detach().cpu().numpy()
+            self.prior.fill_(y_all.mean())
+            
