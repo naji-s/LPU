@@ -28,22 +28,33 @@ import LPU.utils.manifold_utils
 # logging.basicConfig(level=logging.INFO)  # Set the logging level as per your requirement
 
 DEFAULT_CONFIG = {
-    "inducing_points_size": 32,
+    "warm_start": True,
+    "random_state": 754,
+    "inducing_points_size": 64,
     "learning_rate": 0.01,
-    "num_epochs": 10,
+    "num_epochs": 100,
     "stop_learning_lr": 1e-6,
     "device": "cpu",
     "epoch_block": 1,
     "intrinsic_kernel_params": {
         "normed": False,
         "kernel_type": "laplacian",
-        "heat_temp": 0.01,
-        "noise_factor": 0.0,
-        "amplitude": 0.5,
+        "noise_factor": 0.01606854415673371,
+        "amplitude": 0.015389532206728609,
         "n_neighbor": 5,
-        "lengthscale": 0.3,
-        "neighbor_mode": "distance",
-        "power_factor": 1,
+        "lengthscale": 76.37052411449602,
+        "neighbor_mode": "connectivity",
+        "power_factor": 0.10733466786949608,
+        
+        # "normed": False,
+        # "kernel_type": "laplacian",
+        # "heat_temp": 0.01,
+        # "noise_factor": 0.0,
+        # "amplitude": 0.5,
+        # "n_neighbor": 5,
+        # "lengthscale": 0.3,
+        # "neighbor_mode": "distance",
+        # "power_factor": 1,
         "invert_M_first": False,
     },
     "dataset_name": "animal_no_animal",
@@ -76,9 +87,14 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
             if config is None:
                 config = {}
                 LOG.warning("No config provided for PsycM likelihood. Using default config.")
+            self.config = config
             is_SPM = config.get('is_SPM', False)
             warm_start_params = config.get('warm_start_params', None)
             input_dim = config.get('input_dim', None)
+            self.gamma_mean_init = torch.tensor([self.config.get('gamma_mean_init', 0.)], dtype=LPU.constants.DTYPE)
+            self.lambda_mean_init = torch.tensor([self.config.get('lambda_mean_init', 0.)], dtype=LPU.constants.DTYPE)
+            self.gamma_var_init = torch.tensor(self.config.get('gamma_var_init', 1.), dtype=LPU.constants.DTYPE)
+            self.lambda_var_init = torch.tensor(self.config.get('lambda_var_init', 1.), dtype=LPU.constants.DTYPE)
 
             duplicate_keys = set(config.keys()) & set(kwargs.keys())
             if duplicate_keys:
@@ -130,14 +146,14 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
             # self.gamma = torch.nn.Parameter(torch.zeros(1))
             # self.lambda_ = torch.nn.Parameter(torch.zeros(1))
 
-            self.gamma_mean = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE))# + gamma)
-            self.lambda_mean = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE))# + lambda_ )
+            self.gamma_mean = torch.nn.Parameter(self.gamma_mean_init)# + gamma)
+            self.lambda_mean = torch.nn.Parameter(self.lambda_mean_init)# + lambda_ )
             # self.dirichlet_alpha_gamma = torch.nn.Parameter(torch.zeros(1))
             # self.dirichlet_alpha_lambda = torch.nn.Parameter(torch.zeros(1))
             # self.dirichlet_alpha_dummy = torch.ones(1)
 
-            self.gamma_var = torch.nn.Parameter(torch.randn(1, dtype=LPU.constants.DTYPE))
-            self.lambda_var = torch.nn.Parameter(torch.randn(1, dtype=LPU.constants.DTYPE))
+            self.gamma_var = torch.nn.Parameter(self.gamma_var_init)
+            self.lambda_var = torch.nn.Parameter(self.lambda_var_init)
             self.anchor_weight = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE).squeeze(), requires_grad=False)
             self.train_GP = torch.nn.Parameter(torch.ones(1, dtype=LPU.constants.DTYPE).squeeze(), requires_grad=False)
             # self.alpha = torch.nn.Parameter(torch.randn(input_dim))
@@ -153,7 +169,7 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
         def update_input_data(self, X):
             self.X = X
 
-        
+
         def forward(self, function_samples):
             
             # self.variational_covar_alpha = torch.matmul(L, L.transpose(-1, -2)) + torch.eye(L.shape[0]) * LPU.constants.EPSILON

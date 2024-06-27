@@ -4,7 +4,9 @@ import datetime
 import time
 import tempfile
 
+from matplotlib import pyplot as plt
 import ray.tune
+import ray.tune.callback
 import ray.tune.schedulers
 import ray.train
 import numpy as np
@@ -18,7 +20,51 @@ import LPU.utils.utils_general
 LOG = LPU.utils.utils_general.configure_logger(__name__)
 MODEL_NAME = 'PsychM'
 
-def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None):
+class MyCallback(ray.tune.Callback):
+    def __init__(self, allow_list=None):
+        self.fig = None
+        self.axs = None
+        self.metric_data = {}
+        self.initialized = False
+        self.trial_dir = None
+        if allow_list is None:
+            allow_list = ['time_this_iter_s', 'gamma', 'lambda', 
+                          'learning_rate', 'val_overall_loss', 'val_y_APS',
+                          'val_y_accuracy', 'val_y_auc']
+        self.allow_list = allow_list
+
+    def on_trial_start(self, iteration, trials, trial, **info):
+        self.trial_dir = trial.local_path
+
+    def on_trial_result(self, iteration, trials, trial, result):
+        if not self.initialized:
+            self.fig, self.axs = plt.subplots(len(self.allow_list), 1, figsize=(8, 4 * len(self.allow_list)), sharex=True)
+            self.metric_data = {metric_name: [] for metric_name in result.keys() if metric_name in self.allow_list}
+            self.initialized = True
+
+        for metric_name, metric_value in result.items():
+            if metric_name in self.allow_list:
+                self.metric_data[metric_name].append(metric_value)
+
+        for i, (metric_name, metric_values) in enumerate(self.metric_data.items()):
+            self.axs[i].clear()
+            self.axs[i].plot(range(1, len(metric_values) + 1), metric_values, label=metric_name)
+            self.axs[i].set_xlabel('Epoch')
+            self.axs[i].set_ylabel(metric_name)
+            self.axs[i].legend()
+
+        self.fig.tight_layout()
+        self.fig.savefig(os.path.join(self.trial_dir, "progress.png"))
+
+    def on_trial_complete(self, iteration, trials, trial, **info):
+        if self.fig:
+            plt.close(self.fig)
+            self.fig = None
+            self.axs = None
+            self.metric_data = {}
+            self.initialized = False
+
+def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None, random_state=None, plot_results=True):
     # setting the seed for the tuning
     if random_state is not None:
         LPU.utils.utils_general.set_seed(random_state)
@@ -29,8 +75,8 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         # making sure the model training is not gonna set the seed 
         # since we potentially might want to set the seed for the tuning
 		"random_state": ray.tune.randint(0, 1000),
-        "inducing_points_size": ray.tune.choice([64]),
-        "learning_rate": 0.01, 
+        "inducing_points_size": ray.tune.choice([32, 64]),
+        "learning_rate": ray.tune.loguniform(1e-4, 1e-2),
         "num_epochs": ray.tune.choice(range(max_num_epochs, max_num_epochs + 1)),
         "intrinsic_kernel_params": {
             "normed": ray.tune.choice([False]),
@@ -86,7 +132,7 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
     dataloaders_dict = LPU.utils.dataset_utils.create_dataloaders_dict(data_config)
 
     result = ray.tune.run(
-        ray.tune.with_parameters(LPU.scripts.PsychM.run_PsychM.train_model, dataloaders_dict=dataloaders_dict, with_ray=True),
+        ray.tune.with_parameters(LPU.scripts.PsychM.run_PsychM.train_model, dataloaders_dict=dataloaders_dict, with_ray=True, plot_results=plot_results),
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=num_samples,
@@ -95,7 +141,9 @@ def main(num_samples=100, max_num_epochs=200, gpus_per_trial=0, results_dir=None
         scheduler=scheduler,
         storage_path=results_dir,
         progress_reporter=reporter,
-        keep_checkpoints_num=1)
+        keep_checkpoints_num=1,
+        callbacks=[MyCallback()]
+        )
     execution_time = time.time() - execution_start_time
     LOG.info(f"Execution time: {execution_time} seconds")
 
