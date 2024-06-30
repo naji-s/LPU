@@ -15,7 +15,6 @@ import LPU.models.geometric.geometric_base
 import LPU.utils.matrix_utils as matrix_utils
 import LPU.constants
 import LPU.models.lpu_model_base
-import LPU.constants
 import LPU.datasets.animal_no_animal.animal_no_animal_utils
 import LPU.models.lpu_model_base
 import LPU.models.geometric.PsychM.PsychM
@@ -28,11 +27,11 @@ import LPU.utils.manifold_utils
 # logging.basicConfig(level=logging.INFO)  # Set the logging level as per your requirement
 
 DEFAULT_CONFIG = {
-    "warm_start": True,
+    "warm_start": False,
     "inducing_points_size": 64,
     "learning_rate": 0.01,
     "num_epochs": 100,
-    "stop_learning_lr": 1e-6,
+    "stop_learning_lr": 1e-8,
     "device": "cpu",
     "epoch_block": 1,
     "intrinsic_kernel_params": {
@@ -90,10 +89,10 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
             is_SPM = config.get('is_SPM', False)
             warm_start_params = config.get('warm_start_params', None)
             input_dim = config.get('input_dim', None)
-            self.gamma_mean_init = torch.tensor([self.config.get('gamma_mean_init', 0.)], dtype=LPU.constants.DTYPE)
-            self.lambda_mean_init = torch.tensor([self.config.get('lambda_mean_init', 0.)], dtype=LPU.constants.DTYPE)
-            self.gamma_var_init = torch.tensor(self.config.get('gamma_var_init', 1.), dtype=LPU.constants.DTYPE)
-            self.lambda_var_init = torch.tensor(self.config.get('lambda_var_init', 1.), dtype=LPU.constants.DTYPE)
+            self.gamma_prime_mean_init = torch.tensor([self.config.get('gamma_prime_mean_init', 0.)], dtype=LPU.constants.DTYPE)
+            self.lambda_prime_mean_init = torch.tensor([self.config.get('lambda_prime_mean_init', 0.)], dtype=LPU.constants.DTYPE)
+            self.gamma_prime_var_init = torch.tensor(self.config.get('gamma_prime_var_init', 0), dtype=LPU.constants.DTYPE)
+            self.lambda_prime_var_init = torch.tensor(self.config.get('lambda_prime_var_init', 0), dtype=LPU.constants.DTYPE)
 
             duplicate_keys = set(config.keys()) & set(kwargs.keys())
             if duplicate_keys:
@@ -114,9 +113,9 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
             ################################################################################################            
             # setting the mean and variance for the variational distribution for the psychometric function
             ################################################################################################            
-            LOG.info(f"True alpha: {true_alpha}")
-            LOG.info(f"True beta: {true_beta}")
-            self.variational_mean_alpha = torch.nn.Parameter(torch.zeros(input_dim, dtype=LPU.constants.DTYPE))# + true_alpha)
+                        
+            ## setting alpha prior
+            
             # Parameter for the log of the diagonal elements to ensure they are positive
             # making sure no element of diagonal is too small to avoid overflow. 
             # Assuming LPU.constants.DTYPE and LPU.constants.EPSILON are predefined constants
@@ -129,50 +128,37 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
 
             # Setting this as a parameter
             self.log_diag = torch.nn.Parameter(safe_tensor)
+            
             # Parameter for the lower triangular elements below the diagonal
             # There are input_dim * (input_dim - 1) / 2 such elements
             self.lower_tri = torch.nn.Parameter(torch.randn(input_dim * (input_dim - 1) // 2, dtype=LPU.constants.DTYPE))
-            # self.variational_covar_alpha = torch.nn.Parameter(torch.zeros(input_dim))
-            # self.variational_covar_alpha_L = torch.nn.Parameter(torch.zeros(input_dim))
-            # self.diag = torch.nn.Parameter(torch.randn(input_dim))
-            # Parameter for the lower triangular elements below the diagonal
-            # There are input_dim * (input_dim - 1) / 2 such elements
-            # self.lower_tri = torch.nn.Parameter(torch.randn(input_dim * (input_dim - 1) // 2))
+            self.variational_mean_alpha = torch.nn.Parameter(torch.zeros(input_dim, dtype=LPU.constants.DTYPE))# + true_alpha)
             
+            
+            # setting up beta prior
             self.variational_mean_beta = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE).squeeze())# + true_beta)
             self.variational_covar_beta = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE).squeeze()) 
 
-            # self.gamma = torch.nn.Parameter(torch.zeros(1))
-            # self.lambda_ = torch.nn.Parameter(torch.zeros(1))
-
-            self.gamma_mean = torch.nn.Parameter(self.gamma_mean_init)# + gamma)
-            self.lambda_mean = torch.nn.Parameter(self.lambda_mean_init)# + lambda_ )
-            # self.dirichlet_alpha_gamma = torch.nn.Parameter(torch.zeros(1))
-            # self.dirichlet_alpha_lambda = torch.nn.Parameter(torch.zeros(1))
-            # self.dirichlet_alpha_dummy = torch.ones(1)
-
-            self.gamma_var = torch.nn.Parameter(self.gamma_var_init)
-            self.lambda_var = torch.nn.Parameter(self.lambda_var_init)
-            self.anchor_weight = torch.nn.Parameter(torch.zeros(1, dtype=LPU.constants.DTYPE).squeeze(), requires_grad=False)
-            self.train_GP = torch.nn.Parameter(torch.ones(1, dtype=LPU.constants.DTYPE).squeeze(), requires_grad=False)
-            # self.alpha = torch.nn.Parameter(torch.randn(input_dim))
-            # self.beta = torch.nn.Parameter(torch.randn(1))
-            # log sigmoid is used in the forward layer for loss to reduce floating point errors
-            # self.psych_logsigmoid = torch.nn.LogSigmoid()
-            # self.gp_logsigmoid = torch.nn.LogSigmoid()
-
-            # self.sigmoid = torch.nn.Sigmoid()
-            # self.softmax = torch.nn.Softmax(0)
-            # self.L_param = torch.nn.Parameter(torch.randn(input_dim, input_dim))
+            # setting up gamma and lambda prior
+            self.gamma_prime_mean = torch.nn.Parameter(self.gamma_prime_mean_init)# + gamma)
+            self.lambda_prime_mean = torch.nn.Parameter(self.lambda_prime_mean_init)# + lambda_ )
+            self.gamma_prime_var = torch.nn.Parameter(self.gamma_prime_var_init)
+            self.lambda_prime_var = torch.nn.Parameter(self.lambda_prime_var_init)
 
         def update_input_data(self, X):
             self.X = X
 
+        def set_gamma_lambda(self):
+            """
+            Set the values for gamma and lambda parameters using fill_().
+            """
+            gamma_prime_value = self.gamma_prime_mean
+            lambda_prime_value = self.lambda_prime_mean
+            temp_gamma, temp_lambda, _ = torch.softmax(torch.concat([gamma_prime_value, lambda_prime_value, torch.zeros_like(lambda_prime_value)], dim=-1), dim=0)
+            self.gamma.data.fill_(temp_gamma)
+            self.lambda_.data.fill_(temp_lambda)
 
         def forward(self, function_samples):
-            
-            # self.variational_covar_alpha = torch.matmul(L, L.transpose(-1, -2)) + torch.eye(L.shape[0]) * LPU.constants.EPSILON
-            # self.alpha = torch.distributions.LowRankMultivariateNormal(loc=self.variational_mean_alpha, cov_factor=L, cov_diag=torch.eye(L.shape[0]) * LPU.constants.EPSILON).rsample()#torch.Size([function_samples.shape[0]]))
             # Construct the diagonal part using the exponential of the log-diagonal
             diag = torch.diag(torch.exp(self.log_diag))
             
@@ -185,75 +171,18 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
 
             self.alpha = torch.distributions.MultivariateNormal(self.variational_mean_alpha, scale_tril=L).rsample()#torch.Size([function_samples.shape[0]]))
             self.beta = torch.distributions.Normal(self.variational_mean_beta, torch.exp(self.variational_covar_beta)).rsample()#torch.Size([function_samples.shape[0]]))
-            gamma_sample = torch.distributions.Normal(self.gamma_mean, torch.exp(self.gamma_var)).rsample()#torch.Size([function_samples.shape[0]]))
-            lambda_sample = torch.distributions.Normal(self.lambda_mean, torch.exp(self.lambda_var)).rsample()#torch.Size([function_samples.shape[0]]))
-            # gamma_sample = self.gamma_var
-            # lambda_sample = self.lambda_var
+            gamma_prime_sample = torch.distributions.Normal(self.gamma_prime_mean, torch.nn.functional.softplus(self.gamma_prime_var)).rsample()#torch.Size([function_samples.shape[0]]))
+            lambda_prime_sample = torch.distributions.Normal(self.lambda_prime_mean, torch.nn.functional.softplus(self.lambda_prime_var)).rsample()#torch.Size([function_samples.shape[0]]))
             self.linear_response = torch.matmul(self.X, self.alpha) + self.beta
-            self.gamma, self.lambda_, _ = torch.softmax(torch.concat([gamma_sample, lambda_sample, torch.zeros_like(lambda_sample)], dim=-1), dim=0)
-            self.psychm_response = self.gamma + (1 - self.gamma - self.lambda_) * torch.sigmoid(self.linear_response)
             L_s = self.linear_response
             L_t = function_samples
-            # self.psychm_response = torch.sigmoid(self.linear_response)
-            # probs = torch.sigmoid(self.linear_response) * torch.sigmoid(function_samples) * self.train_GP
-            # other_probs = torch.exp(torch.nn.function(self.linear_response) + torch.nn.functional.logsigmoid(function_samples))
-            # logsigs = torch.nn.functional.logsigmoid(self.linear_response) + torch.nn.functional.logsigmoid(function_samples)
-            # return torch.distributions.Bernoulli(probs=torch.exp(logsigs))#.mean(0))
-            # return torch.distributions.Bernoulli(logits=logits)#.mean(0))
-            # other_probs = self.psychm_response * torch.sigmoid(function_samples)
-            ########################################################################
-            ########################################################################
-            # def softmax_loss(self, sig_input=None, psych_input=None, l=None, params=None, is_padded=False):
-            #     """sig_input needs to be padded here"""
-            #     if self.is_SPM:
-            #         sig_a, sig_b, psych_alpha, psych_beta = self.partition_params(params)
-            #         gamma_sample, lambda_sample = self.gamma_sample_, self.lambda_sample_
-            #     else:
-            #         sig_a, sig_b, psych_alpha, psych_beta, gamma_sample, lambda_sample = self.partition_params(params)
-
-            # For function_samples, assuming self.kernel_mat is already a PyTorch tensor
-
-            # Reshaping tensors
-            # self.linear_response = self.linear_response.view(-1, -1)
-            # function_samples = function_samples.view(-1, 1)
-            shape = self.linear_response.shape
-            zero = torch.zeros(1, device=self.linear_response.device)
-
-            # Using PyTorch's logsumexp function and other tensor operations
-            # A_leftover = torch.logsumexp(torch.stack([torch.tile(gamma_sample, shape), gamma_sample - self.linear_response, torch.tile(zero, shape)], dim=1), dim=1)
-            # H_F_B_G = -torch.logsumexp(torch.stack([torch.tile(zero, shape), -self.linear_response], dim=1), dim=1) \
-            #         - torch.logsumexp(torch.stack([torch.tile(zero, function_samples.shape), -function_samples], dim=1), dim=1) \
-            #         #- torch.logsumexp(torch.stack([torch.tile(zero, shape), torch.tile(lambda_sample, shape), torch.tile(gamma_sample, shape)], dim=1), dim=1)
-            # log_like = A_leftover + H_F_B_G
-            # log_like = torch.clamp(log_like, max=0.)
-            # torch.where((log_like > 0) & (log_like < LPU.constants.EPSILON), torch.ones_like(log_like, device=log_like.device), log_like)
-            # self.probs = torch.exp(log_like)
-            # E_D = (1 - l) * torch.logsumexp(torch.stack([torch.tile(-lambda_sample, shape), -self.linear_response, -self.linear_response - lambda_sample, -function_samples, -function_samples - gamma_sample, -function_samples - lambda_sample, -self.linear_response - function_samples, -self.linear_response - function_samples - gamma_sample, -self.linear_response - function_samples - lambda_sample], dim=1), dim=1)
-
 
             ### OLDER METHOD OF CLAC
             shape = L_t.shape
             ZERO = torch.zeros(L_t.shape)
-            GAMMA = torch.tile(gamma_sample, shape)
-            LAMBDA = torch.tile(lambda_sample, shape)
+            GAMMA = torch.tile(gamma_prime_sample, shape)
+            LAMBDA = torch.tile(lambda_prime_sample, shape)
             L_s = L_s.unsqueeze(0).expand(shape[0], -1)
-
-            # A = L_t#torch.stack([L_t, ZERO], dim=1)
-            # B = torch.logsumexp(torch.stack([GAMMA, gamma_sample + L_s, L_s], dim=1), dim=1)
-            # C = torch.logsumexp(torch.stack([ZERO, GAMMA, LAMBDA, L_t, lambda_sample + L_t, L_s, L_s + gamma_sample, L_s+lambda_sample, lambda_sample + L_t + L_s], dim=1), dim=1)
-            # # breakpoint()
-            # D = torch.logsumexp(torch.stack([torch.tile(-lambda_sample, shape), 
-            #                                  -L_s, 
-            #                                  -L_s - lambda_sample, 
-            #                                  -function_samples, 
-            #                                  -function_samples - gamma_sample, 
-            #                                  -function_samples - lambda_sample, 
-            #                                  -self.linear_response - function_samples, 
-            #                                  -self.linear_response - function_samples - gamma_sample, 
-            #                                  -self.linear_response - function_samples - lambda_sample], dim=1), dim=1)
-            # total = L_t + B - C - D
-            # return torch.distributions.Bernoulli(logits=total)
-            # breakpoint()
             logit = - torch.logsumexp(torch.stack([ZERO, -L_t], dim=1), dim=1) \
                     + torch.logsumexp(torch.stack([GAMMA, GAMMA - L_s, ZERO], dim=1), dim=1) \
                     - torch.logsumexp(torch.stack([GAMMA, + LAMBDA, ZERO], dim=1), dim=1) - torch.logsumexp(torch.stack([ZERO, -L_s], dim=1), dim=1) \
@@ -262,19 +191,6 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
                                                       LAMBDA, LAMBDA - L_s, LAMBDA - L_t, LAMBDA - L_t - L_s, ZERO, -L_t, -L_s, -L_t - L_s], dim=1), dim=1)
 
             return torch.distributions.Bernoulli(logits=logit)
-            # total = torch.clamp(total, max=0.)
-            # return torch.distributions.Bernoulli(probs=torch.exp(total))
-            # return torch.distributions.Bernoulli(probs=other_probs)
-
-            # return torch.distributions.Bernoulli(probs=self.probs)
-
-            ########################################################################
-            ########################################################################       
-
-            # return torch.distributions.Bernoulli(logits=log_result)
-                                                    
-            # return torch.distributions.Bernoulli(probs=log_result)
-            # return gpytorch.likelihoods.BernoulliLikelihood()
         
         def freeze_parameters(self):
             """Freeze alpha and beta parameters."""
@@ -352,9 +268,16 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
     #         return mean.cpu().numpy()
 
     def predict_prob_l_given_y_X(self, X=None):
-        gamma, lambda_, _ = torch.softmax(torch.tensor([self.likelihood.gamma_mean, self.likelihood.lambda_mean, 0.]), dim=0)
+        # gamma, lambda_, _ = torch.softmax(torch.tensor([self.likelihood.gamma_prime_mean, self.likelihood.lambda_prime_mean, 0.]), dim=0)
+        # Normalize inputs for softmax to prevent underflow/overflow
+        gamma_prime = self.likelihood.gamma_prime_mean
+        lambda_prime = self.likelihood.lambda_prime_mean
+        gamma_prime_norm, lambda_prime_norm = gamma_prime - torch.max(gamma_prime, lambda_prime), lambda_prime - torch.max(gamma_prime, lambda_prime)
+        # Applying softmax on normalized values
+        gamma, lambda_, _ = torch.softmax(torch.tensor([gamma_prime_norm, lambda_prime_norm, 0], dtype=LPU.constants.DTYPE), dim=0)
+        
         linear_response = X @ self.likelihood.variational_mean_alpha + self.likelihood.variational_mean_beta
-        output = (gamma + (1-gamma - lambda_) * torch.sigmoid(linear_response)).cpu().detach().numpy()
+        output = (gamma + (1 - gamma - lambda_) * torch.sigmoid(linear_response)).cpu().detach().numpy()
         return output
         # return self.likelihood.probs.mean(axis=0).cpu().detach().numpy()
 
@@ -364,7 +287,6 @@ class PsychM(LPU.models.geometric.geometric_base.GeometricGPLPUBase):
             f_x = self.gp_model(X)
         y_prob = torch.nn.functional.sigmoid(f_x.rsample(sample_shape=torch.Size([100]))).mean(axis=0).cpu().detach().numpy()
         return y_prob
-    
 
     def validate(self, dataloader, loss_fn=None):
         scores_dict = {}
